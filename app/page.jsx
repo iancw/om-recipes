@@ -10,6 +10,7 @@ import { Dialog, DialogContent } from "../components/ui/dialog.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select.jsx";
 import { cn } from "../lib/cn.js";
+import { DEFAULT_RECIPE_SORT, RECIPE_SORT_OPTIONS } from "../lib/recipe-sort.js";
 import {
   comparisonImageSelectionValue,
   formatComparisonImageLabelForDisplay,
@@ -85,6 +86,7 @@ export default function Page() {
   const [selectedRecipeIndex, setSelectedRecipeIndex] = useState(null);
   const [onlyMine, setOnlyMine] = useState(false);
   const [onlySaved, setOnlySaved] = useState(false);
+  const [sortBy, setSortBy] = useState(DEFAULT_RECIPE_SORT);
   const [selectedImageOption, setSelectedImageOption] = useState(SAMPLE_IMAGE_SELECTION);
   const hasLoadedInitialResults = useRef(false);
   const queryRef = useRef("");
@@ -93,7 +95,12 @@ export default function Page() {
   const loadingRef = useRef(false);
   const loadingMoreRef = useRef(false);
   const activeSearchKeyRef = useRef("");
-  const currentSearchRef = useRef({ query: "", onlyMine: false, onlySaved: false });
+  const currentSearchRef = useRef({
+    query: "",
+    onlyMine: false,
+    onlySaved: false,
+    sortBy: DEFAULT_RECIPE_SORT
+  });
   const activeResetRequestRef = useRef(null);
   const loadMoreSentinelRef = useRef(null);
 
@@ -115,7 +122,8 @@ export default function Page() {
       JSON.stringify({
         q: searchQuery,
         onlyMine: Boolean(filters.onlyMine),
-        onlySaved: Boolean(filters.onlySaved)
+        onlySaved: Boolean(filters.onlySaved),
+        sortBy: filters.sortBy ?? DEFAULT_RECIPE_SORT
       }),
     []
   );
@@ -129,7 +137,8 @@ export default function Page() {
       currentSearchRef.current = {
         query: searchQuery,
         onlyMine: Boolean(filters.onlyMine),
-        onlySaved: Boolean(filters.onlySaved)
+        onlySaved: Boolean(filters.onlySaved),
+        sortBy: filters.sortBy ?? DEFAULT_RECIPE_SORT
       };
       if (activeResetRequestRef.current) {
         activeResetRequestRef.current.abort();
@@ -152,6 +161,7 @@ export default function Page() {
       params.set('q', searchQuery);
       if (filters.onlyMine) params.set('onlyMine', '1');
       if (filters.onlySaved) params.set('onlySaved', '1');
+      params.set('sort', filters.sortBy ?? DEFAULT_RECIPE_SORT);
       params.set('limit', String(PAGE_SIZE));
       params.set('offset', String(offset));
 
@@ -194,13 +204,19 @@ export default function Page() {
   const loadMoreRecipes = useCallback(async () => {
     if (loadingRef.current || loadingMoreRef.current || !hasMoreRef.current) return null;
 
-    const { query: currentQuery, onlyMine: currentOnlyMine, onlySaved: currentOnlySaved } = currentSearchRef.current;
+    const {
+      query: currentQuery,
+      onlyMine: currentOnlyMine,
+      onlySaved: currentOnlySaved,
+      sortBy: currentSortBy
+    } = currentSearchRef.current;
 
     return fetchRecipePage({
       searchQuery: currentQuery,
       filters: {
         onlyMine: currentOnlyMine,
-        onlySaved: currentOnlySaved
+        onlySaved: currentOnlySaved,
+        sortBy: currentSortBy
       },
       offset: resultsRef.current.length,
       append: true
@@ -304,14 +320,18 @@ export default function Page() {
   }, [query]);
 
   useEffect(() => {
-    startSearch("", { onlyMine: false, onlySaved: false });
+    startSearch("", {
+      onlyMine: false,
+      onlySaved: false,
+      sortBy: DEFAULT_RECIPE_SORT
+    });
     hasLoadedInitialResults.current = true;
   }, [startSearch]);
 
   useEffect(() => {
     if (!hasLoadedInitialResults.current) return;
-    startSearch(queryRef.current, { onlyMine, onlySaved });
-  }, [onlyMine, onlySaved, startSearch]);
+    startSearch(queryRef.current, { onlyMine, onlySaved, sortBy });
+  }, [onlyMine, onlySaved, sortBy, startSearch]);
 
   useEffect(() => {
     loadingRef.current = loading;
@@ -463,13 +483,13 @@ export default function Page() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    startSearch(query, { onlyMine, onlySaved });
+    startSearch(query, { onlyMine, onlySaved, sortBy });
   }
 
   return (
     <div className="flex w-full flex-col gap-8 pb-10 pt-2">
       <Card className="overflow-hidden border-border/60 bg-card/80">
-        <CardContent className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)] lg:p-8">
+        <CardContent className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,1.1fr)] lg:p-8">
           <div className="space-y-5">
             <Badge>Recipe Library</Badge>
             <div className="space-y-3">
@@ -501,7 +521,7 @@ export default function Page() {
                 </form>
               </CardContent>
             </Card>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <Card className="border-border/60 bg-background/55">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Image View</CardTitle>
@@ -544,37 +564,64 @@ export default function Page() {
               </Card>
               <Card className="border-border/60 bg-background/55">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Filters</CardTitle>
+                  <CardTitle className="text-base">Sort</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div role="radiogroup" aria-labelledby="recipe-filter-group-label" className="flex flex-wrap gap-2">
-                    <span id="recipe-filter-group-label" className="sr-only">
-                      Recipe filter
-                    </span>
-                    <TogglePill
-                      checked={!onlyMine && !onlySaved}
-                      label="All"
-                      onClick={() => {
-                        setOnlyMine(false);
-                        setOnlySaved(false);
-                      }}
-                    />
-                    <TogglePill
-                      checked={onlyMine}
-                      label="Mine"
-                      onClick={() => {
-                        setOnlyMine(true);
-                        setOnlySaved(false);
-                      }}
-                    />
-                    <TogglePill
-                      checked={onlySaved}
-                      label="Saved"
-                      onClick={() => {
-                        setOnlySaved(true);
-                        setOnlyMine(false);
-                      }}
-                    />
+                  <div className="space-y-3">
+                    <label htmlFor="recipe-sort-by" className="block text-sm font-medium text-foreground">
+                      Sort by
+                    </label>
+                    <Select value={sortBy} onValueChange={(value) => setSortBy(value || DEFAULT_RECIPE_SORT)}>
+                      <SelectTrigger id="recipe-sort-by" aria-label="Sort recipes" className="w-full justify-between">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RECIPE_SORT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border/60 bg-background/55">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Filters</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-5">
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium text-foreground">Show</div>
+                    <div role="radiogroup" aria-labelledby="recipe-filter-group-label" className="flex flex-wrap gap-2">
+                      <span id="recipe-filter-group-label" className="sr-only">
+                        Recipe filter
+                      </span>
+                      <TogglePill
+                        checked={!onlyMine && !onlySaved}
+                        label="All"
+                        onClick={() => {
+                          setOnlyMine(false);
+                          setOnlySaved(false);
+                        }}
+                      />
+                      <TogglePill
+                        checked={onlyMine}
+                        label="Mine"
+                        onClick={() => {
+                          setOnlyMine(true);
+                          setOnlySaved(false);
+                        }}
+                      />
+                      <TogglePill
+                        checked={onlySaved}
+                        label="Saved"
+                        onClick={() => {
+                          setOnlySaved(true);
+                          setOnlyMine(false);
+                        }}
+                      />
+                    </div>
                   </div>
                 </CardContent>
               </Card>

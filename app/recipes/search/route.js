@@ -2,6 +2,7 @@ import { db } from '../../../db/index.ts';
 import { authors, images, recipeComparisonImages, recipeSampleImages, recipes, savedRecipes } from '../../../db/schema.ts';
 import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { getSession } from '../../../lib/auth.js';
+import { normalizeRecipeSort, RECIPE_SORT_VALUES } from '../../../lib/recipe-sort.js';
 import { getSavedRecipeIdsForUser } from '../../../lib/recipe-saves.js';
 
 export async function GET(request) {
@@ -9,6 +10,7 @@ export async function GET(request) {
   const query = (searchParams.get('q') || '').toLowerCase();
   const onlyMine = searchParams.get('onlyMine') === '1';
   const onlySaved = searchParams.get('onlySaved') === '1';
+  const sortBy = normalizeRecipeSort(searchParams.get('sort'));
   const session = await getSession();
   const userId = session?.user?.id ?? null;
 
@@ -50,6 +52,13 @@ export async function GET(request) {
   }
 
   const where = filters.length > 0 ? and(...filters) : undefined;
+  const saveCount = count(savedRecipes.recipeId);
+  const orderBy =
+    sortBy === RECIPE_SORT_VALUES.OLDEST
+      ? [asc(recipes.createdAt), desc(saveCount), asc(recipes.id)]
+      : sortBy === RECIPE_SORT_VALUES.NEWEST
+        ? [desc(recipes.createdAt), desc(saveCount), desc(recipes.id)]
+        : [desc(saveCount), desc(recipes.createdAt), desc(recipes.id)];
 
   // Fetch the base recipe rows first, then attach image arrays.
   // This avoids a huge Cartesian product when joining multiple image join tables.
@@ -104,28 +113,19 @@ export async function GET(request) {
     }
   };
 
-  const baseRecipes = query
-    ? await db
-        .select(recipeFields)
-        .from(recipes)
-        .leftJoin(authors, eq(authors.id, recipes.authorId))
-        .where(where)
-        .orderBy(desc(recipes.createdAt))
-        .limit(fetchLimit)
-        .offset(offset)
-    : await db
-        .select({
-          ...recipeFields,
-          saveCount: count(savedRecipes.recipeId)
-        })
-        .from(recipes)
-        .leftJoin(authors, eq(authors.id, recipes.authorId))
-        .leftJoin(savedRecipes, eq(savedRecipes.recipeId, recipes.id))
-        .where(where)
-        .groupBy(recipes.id, authors.id)
-        .orderBy(desc(count(savedRecipes.recipeId)), desc(recipes.createdAt))
-        .limit(fetchLimit)
-        .offset(offset);
+  const baseRecipes = await db
+    .select({
+      ...recipeFields,
+      saveCount
+    })
+    .from(recipes)
+    .leftJoin(authors, eq(authors.id, recipes.authorId))
+    .leftJoin(savedRecipes, eq(savedRecipes.recipeId, recipes.id))
+    .where(where)
+    .groupBy(recipes.id, authors.id)
+    .orderBy(...orderBy)
+    .limit(fetchLimit)
+    .offset(offset);
 
   const hasMore = baseRecipes.length > limit;
   const pageRecipes = hasMore ? baseRecipes.slice(0, limit) : baseRecipes;

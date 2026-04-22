@@ -11,6 +11,8 @@ describe('normalizeRecipeSort', () => {
     expect(normalizeRecipeSort(RECIPE_SORT_VALUES.SAVES)).toBe(RECIPE_SORT_VALUES.SAVES);
     expect(normalizeRecipeSort(RECIPE_SORT_VALUES.NEWEST)).toBe(RECIPE_SORT_VALUES.NEWEST);
     expect(normalizeRecipeSort(RECIPE_SORT_VALUES.OLDEST)).toBe(RECIPE_SORT_VALUES.OLDEST);
+    expect(normalizeRecipeSort(RECIPE_SORT_VALUES.AUTHOR)).toBe(RECIPE_SORT_VALUES.AUTHOR);
+    expect(normalizeRecipeSort(RECIPE_SORT_VALUES.RECIPE_NAME)).toBe(RECIPE_SORT_VALUES.RECIPE_NAME);
   });
 
   it('falls back to the default sort for unsupported values', () => {

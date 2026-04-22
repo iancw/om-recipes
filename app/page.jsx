@@ -568,9 +568,6 @@ export default function Page() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    <label htmlFor="recipe-sort-by" className="block text-sm font-medium text-foreground">
-                      Sort by
-                    </label>
                     <Select value={sortBy} onValueChange={(value) => setSortBy(value || DEFAULT_RECIPE_SORT)}>
                       <SelectTrigger id="recipe-sort-by" aria-label="Sort recipes" className="w-full justify-between">
                         <SelectValue />
@@ -592,7 +589,6 @@ export default function Page() {
                 </CardHeader>
                 <CardContent className="grid gap-5">
                   <div className="space-y-3">
-                    <div className="text-sm font-medium text-foreground">Show</div>
                     <div role="radiogroup" aria-labelledby="recipe-filter-group-label" className="flex flex-wrap gap-2">
                       <span id="recipe-filter-group-label" className="sr-only">
                         Recipe filter

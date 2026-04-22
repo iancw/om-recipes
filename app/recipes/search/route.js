@@ -58,6 +58,10 @@ export async function GET(request) {
       ? [asc(recipes.createdAt), desc(saveCount), asc(recipes.id)]
       : sortBy === RECIPE_SORT_VALUES.NEWEST
         ? [desc(recipes.createdAt), desc(saveCount), desc(recipes.id)]
+        : sortBy === RECIPE_SORT_VALUES.AUTHOR
+          ? [asc(recipes.authorName), asc(recipes.recipeName), desc(saveCount), asc(recipes.id)]
+          : sortBy === RECIPE_SORT_VALUES.RECIPE_NAME
+            ? [asc(recipes.recipeName), asc(recipes.authorName), desc(saveCount), asc(recipes.id)]
         : [desc(saveCount), desc(recipes.createdAt), desc(recipes.id)];
 
   // Fetch the base recipe rows first, then attach image arrays.

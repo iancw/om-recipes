@@ -107,6 +107,35 @@ export const authSessions = pgTable(
     ]
 );
 
+export const privacyRequests = pgTable(
+    'privacy_requests',
+    {
+        id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+        userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+        subjectUserUuid: uuid('subject_user_uuid').notNull(),
+        requestType: varchar('request_type', { length: 32 }).notNull(),
+        status: varchar('status', { length: 32 }).notNull().default('pending'),
+        artifactKey: text('artifact_key'),
+        artifactContentType: text('artifact_content_type'),
+        artifactFileName: text('artifact_file_name'),
+        artifactSizeBytes: integer('artifact_size_bytes'),
+        artifactExpiresAt: timestamp('artifact_expires_at', { withTimezone: true }),
+        failureSummary: text('failure_summary'),
+        createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+        updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+        completedAt: timestamp('completed_at', { withTimezone: true })
+    },
+    (t) => [
+        index('privacy_requests_user_id_idx').on(t.userId),
+        index('privacy_requests_subject_user_uuid_idx').on(t.subjectUserUuid),
+        index('privacy_requests_type_status_idx').on(t.requestType, t.status),
+        index('privacy_requests_created_at_idx').on(t.createdAt),
+        uniqueIndex('privacy_requests_user_request_type_inflight_unique')
+            .on(t.userId, t.requestType)
+            .where(sql`${t.userId} is not null and ${t.status} in ('pending', 'processing')`)
+    ]
+);
+
 export const images = pgTable(
     'images',
     {
@@ -303,6 +332,7 @@ export const usersRelations = relations(users, ({ many }) => ({
     authors: many(authors),
     magicLinks: many(authMagicLinks),
     sessions: many(authSessions),
+    privacyRequests: many(privacyRequests),
     savedRecipes: many(savedRecipes),
     modeSlotAssignments: many(modeSlotAssignments)
 }));
@@ -383,6 +413,13 @@ export const authMagicLinksRelations = relations(authMagicLinks, ({ one }) => ({
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
     user: one(users, {
         fields: [authSessions.userId],
+        references: [users.id]
+    })
+}));
+
+export const privacyRequestsRelations = relations(privacyRequests, ({ one }) => ({
+    user: one(users, {
+        fields: [privacyRequests.userId],
         references: [users.id]
     })
 }));

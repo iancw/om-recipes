@@ -127,6 +127,13 @@
       "when": 1775661023411,
       "tag": "0017_keen_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1776996170826,
+      "tag": "0018_unknown_vivisector",
+      "breakpoints": true
     }
   ]
 }

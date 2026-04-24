@@ -4,7 +4,9 @@ import { db } from '../../db/index.ts';
 import { authors } from '../../db/schema.ts';
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
-import { findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
+import { redirect } from 'next/navigation';
+import { clearSessionCookie, findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
+import { startAccountDeletion, startPrivacyExport } from '../../lib/privacy.js';
 
 function normalizeOptionalUrl(v) {
     const s = String(v ?? '').trim();
@@ -43,4 +45,32 @@ export async function updateMyProfileAction(formData) {
         .where(eq(authors.id, author.id));
 
     revalidatePath('/profile');
+}
+
+export async function requestMyDataExportAction() {
+    const session = await requireUser();
+
+    await startPrivacyExport({
+        userId: session.user.id,
+        userUuid: session.user.uuid
+    });
+
+    revalidatePath('/profile');
+}
+
+export async function deleteMyAccountAction(formData) {
+    const session = await requireUser();
+    const confirmation = String(formData?.get('confirmation') ?? '').trim();
+
+    if (confirmation !== 'DELETE') {
+        throw new Error('Type DELETE to confirm account deletion');
+    }
+
+    await startAccountDeletion({
+        userId: session.user.id,
+        userUuid: session.user.uuid
+    });
+
+    await clearSessionCookie();
+    redirect('/login?deleted=1');
 }

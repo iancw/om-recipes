@@ -34,6 +34,7 @@ export default async function LoginPage({ searchParams }) {
     const resolvedSearchParams = await searchParams;
     const redirectTo = normalizeRedirectPath(resolvedSearchParams?.redirectTo, '/profile');
     const sent = resolvedSearchParams?.sent === '1';
+    const deleted = resolvedSearchParams?.deleted === '1';
     const error = getErrorMessage(resolvedSearchParams?.error);
 
     if (session?.user) {
@@ -62,6 +63,7 @@ export default async function LoginPage({ searchParams }) {
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+                {deleted ? <Alert type="success">Your account has been deleted and you’ve been signed out.</Alert> : null}
                 {sent ? <Alert type="success">Check your email for a sign-in link.</Alert> : null}
                 {error ? <Alert type="error">{error}</Alert> : null}
 

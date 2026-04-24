@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { analyticsConsentGranted } from "../lib/privacy-consent.js";
 
 function pageView({ measurementId, pagePath }) {
   if (!measurementId) return;
@@ -19,13 +20,14 @@ function pageView({ measurementId, pagePath }) {
 /**
  * Tracks GA4 page_view on initial render and whenever Next.js navigation changes.
  */
-export function GA4PageView({ measurementId }) {
+export function GA4PageView({ measurementId, consent }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const lastPathRef = useRef(null);
 
   useEffect(() => {
     if (!measurementId) return;
+    if (!analyticsConsentGranted(consent)) return;
 
     const search = searchParams?.toString();
     const pagePath = search ? `${pathname}?${search}` : pathname;
@@ -35,7 +37,7 @@ export function GA4PageView({ measurementId }) {
     lastPathRef.current = pagePath;
 
     pageView({ measurementId, pagePath });
-  }, [measurementId, pathname, searchParams]);
+  }, [consent, measurementId, pathname, searchParams]);
 
   return null;
 }

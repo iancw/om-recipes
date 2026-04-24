@@ -123,7 +123,7 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
             }
         });
 
-        expect(transactionMock).toHaveBeenCalledTimes(1);
+        expect(transactionMock).not.toHaveBeenCalled();
         expect(insertValuesCalls[0]).toEqual(
             expect.objectContaining({
                 recipeId: 1,
@@ -275,7 +275,7 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
         expect(result.resizeAttempted).toBe(true);
         expect(result.resizeSucceeded).toBe(false);
         expect(result.resizeSkipped).toBe(false);
-        expect(transactionMock).toHaveBeenCalledTimes(1);
+        expect(transactionMock).not.toHaveBeenCalled();
         expect(updateSetCalls).toHaveLength(1);
         expect(consoleWarnMock).toHaveBeenCalledTimes(1);
         expect(consoleWarnMock.mock.calls[0][1]).toEqual(
@@ -331,7 +331,14 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
         });
         expect(headObjectMock).not.toHaveBeenCalled();
         expect(transactionMock).not.toHaveBeenCalled();
-        expect(insertValuesCalls).toHaveLength(0);
+        expect(insertValuesCalls).toHaveLength(1);
+        expect(insertValuesCalls[0]).toEqual(
+            expect.objectContaining({
+                recipeId: 1,
+                imageId: 2,
+                authorId: 30
+            })
+        );
         expect(updateSetCalls).toHaveLength(0);
     });
 });

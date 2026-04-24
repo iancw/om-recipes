@@ -100,6 +100,10 @@ export function ProfileForm({ action, initialValues }) {
             <div className="pt-2">
                 <ProfileSubmitButton isDirty={isDirty} />
             </div>
+
+            <p className="text-sm leading-6 text-muted-foreground">
+                Privacy notice, export requests, and account deletion controls are available below this profile form.
+            </p>
         </form>
     );
 }

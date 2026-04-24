@@ -2,8 +2,11 @@ import '../styles/globals.css';
 import { Footer } from '../components/footer';
 import { Header } from '../components/header';
 import { GA4PageView } from '../components/ga4';
+import { AnalyticsConsentBanner } from '../components/AnalyticsConsentBanner';
 import Script from 'next/script';
 import { Suspense } from 'react';
+import { cookies } from 'next/headers';
+import { ANALYTICS_CONSENT_COOKIE, analyticsConsentGranted, normalizeAnalyticsConsent } from '../lib/privacy-consent.js';
 
 export const metadata = {
     title: {
@@ -13,8 +16,11 @@ export const metadata = {
     description: 'Discover and share color recipes for OM System and Olympus cameras.'
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
     const measurementId = process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID;
+    const cookieStore = await cookies();
+    const analyticsConsent = normalizeAnalyticsConsent(cookieStore.get(ANALYTICS_CONSENT_COOKIE)?.value);
+    const shouldLoadAnalytics = Boolean(measurementId) && analyticsConsentGranted(analyticsConsent);
 
     return (
         // Some browser extensions (notably Google Tag Assistant) inject
@@ -24,7 +30,7 @@ export default function RootLayout({ children }) {
             <head>
                 <link rel="icon" href="/favicon.svg" sizes="any" />
 
-                {measurementId ? (
+                {shouldLoadAnalytics ? (
                     <>
                         <Script
                             src={`https://www.googletagmanager.com/gtag/js?id=${measurementId}`}
@@ -47,8 +53,9 @@ export default function RootLayout({ children }) {
             <body className="antialiased" suppressHydrationWarning>
                 {/* useSearchParams() requires a Suspense boundary in App Router */}
                 <Suspense fallback={null}>
-                    <GA4PageView measurementId={measurementId} />
+                    <GA4PageView measurementId={measurementId} consent={analyticsConsent} />
                 </Suspense>
+                <AnalyticsConsentBanner initialConsent={analyticsConsent} />
                 <div className="flex min-h-screen flex-col px-4 sm:px-6">
                     <div className="flex flex-col w-full grow">
                         <Header />

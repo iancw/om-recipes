@@ -65,6 +65,7 @@ Database-related scripts:
 
 ```bash
 npm run db:migrate
+npm run privacy:cleanup
 ```
 
 ## Environment Notes
@@ -89,5 +90,19 @@ Frequently used environment variables in this project include:
 - `OCI_IMAGES_ORIGINAL_BUCKET`
 - `OCI_IMAGES_PROCESSED_BUCKET`
 - `OCI_DB_BACKUP_BUCKET`
+- `AUTH_MAGIC_LINK_RETENTION_DAYS`
+- `AUTH_SESSION_RETENTION_DAYS`
+- `PRIVACY_EXPORT_RETENTION_HOURS`
+- `PRIVACY_REQUEST_AUDIT_RETENTION_DAYS`
+- `ABANDONED_UPLOAD_RETENTION_HOURS`
 
 The exact set you need depends on which parts of the app you are working on. Recipe browsing and most database-backed development primarily depend on the Netlify runtime and database connection; auth, uploads, image processing, and backups each require additional configuration.
+
+## Privacy Operations
+
+OM Recipes now exposes a public `/privacy` page, analytics consent controls, profile-based export/deletion requests, and retention cleanup for time-limited privacy artifacts.
+
+- Analytics stays off until the visitor explicitly allows it through the first-party consent control.
+- Privacy exports are stored as downloadable archives and expire after `PRIVACY_EXPORT_RETENTION_HOURS`.
+- Retention cleanup is handled by `npm run privacy:cleanup`, which purges expired auth/privacy artifacts and abandoned upload objects.
+- Third-party processors used by the app include Netlify, Neon/Postgres via Netlify DB, Oracle Cloud Infrastructure, and optional Google Analytics 4.

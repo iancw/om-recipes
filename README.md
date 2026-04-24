@@ -12,6 +12,8 @@ Contributions are welcome! But this is a vibe-coded app without robust testing o
 
 ## Local Development
 
+Use Node.js 22 for local development. This repo includes both `.node-version` and `.nvmrc` pinned to `22.22.0`.
+
 For full local functionality, run the app through Netlify CLI rather than plain `next dev`.
 
 1. Install dependencies:

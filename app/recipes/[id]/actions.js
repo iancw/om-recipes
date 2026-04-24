@@ -6,6 +6,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireUser } from '../../../lib/auth.js';
+import { getRecipePath } from '../../../lib/recipe-url.js';
 
 import {
     computeRecipeFingerprint,
@@ -115,7 +116,7 @@ export async function updateRecipeAction(formData) {
         .returning({ id: recipes.id, uuid: recipes.uuid, slug: recipes.slug });
 
     const r = updated[0];
-    revalidatePath(`/recipes/${r.uuid ?? r.slug}`);
+    revalidatePath(getRecipePath(r));
 }
 
 export async function deleteMyRecipeAction(formData) {
@@ -211,7 +212,7 @@ export async function deleteRecipeSampleImageAction({ recipeId, imageId }) {
     await deleteOrphanedImagesByIds([parsedImageId]);
 
     const recipe = recipeRows[0];
-    revalidatePath(`/recipes/${recipe.uuid ?? recipe.slug}`);
+    revalidatePath(getRecipePath(recipe));
     revalidatePath('/');
     revalidatePath('/my-samples');
 }
@@ -259,6 +260,6 @@ export async function setPrimaryRecipeSampleImageAction({ recipeId, imageId }) {
         .where(and(eq(recipeSampleImages.recipeId, parsedRecipeId), eq(recipeSampleImages.imageId, parsedImageId)));
 
     const recipe = recipeRows[0];
-    revalidatePath(`/recipes/${recipe.uuid ?? recipe.slug}`);
+    revalidatePath(getRecipePath(recipe));
     revalidatePath('/');
 }

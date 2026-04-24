@@ -1,6 +1,7 @@
 'use client';
 
 import { useTransition } from 'react';
+import { getRecipePath } from '../lib/recipe-url.js';
 import SaturationWheel from './SaturationWheel.jsx';
 import { Button } from './ui/button.jsx';
 
@@ -79,7 +80,7 @@ export default function SlotRow({ slotNumber, assignment, modePosition, clearAct
                     <div className="min-w-0 flex-1">
                         {assignment.recipeSlug ? (
                             <a
-                                href={`/recipes/${assignment.recipeSlug}`}
+                                href={getRecipePath({ slug: assignment.recipeSlug })}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="truncate block text-sm font-medium hover:underline"

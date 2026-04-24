@@ -75,7 +75,7 @@ describe('setPrimaryRecipeSampleImageAction', () => {
         expect(updateCalls).toHaveLength(2);
         expect(updateCalls[0].values).toEqual({ isPrimary: false });
         expect(updateCalls[1].values).toEqual({ isPrimary: true });
-        expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/recipe-uuid');
+        expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/recipe-slug');
         expect(revalidatePathMock).toHaveBeenCalledWith('/');
     });
 });

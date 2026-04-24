@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '../../db/index.ts';
 import { authors, recipeSampleImages, recipes } from '../../db/schema.ts';
 import { requireUser } from '../../lib/auth.js';
+import { getRecipePath } from '../../lib/recipe-url.js';
 import { deleteOrphanedImagesByIds } from '../../lib/oci/deleteOrphanedImages.js';
 
 export async function deleteMySampleImageAction({ recipeId, imageId }) {
@@ -48,7 +49,7 @@ export async function deleteMySampleImageAction({ recipeId, imageId }) {
     await deleteOrphanedImagesByIds([parsedImageId]);
 
     const recipe = recipeRows[0];
-    revalidatePath(`/recipes/${recipe.uuid ?? recipe.slug}`);
+    revalidatePath(getRecipePath(recipe));
     revalidatePath('/');
     revalidatePath('/my-samples');
 }

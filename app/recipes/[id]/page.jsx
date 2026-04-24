@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '../../../lib/auth.js';
 import { db } from '../../../db/index.ts';
@@ -16,13 +16,14 @@ import {
     updateRecipeAction
 } from './actions';
 import { getSavedRecipeIdsForUser } from '../../../lib/recipe-saves.js';
+import { getRecipePath, isUuidLike } from '../../../lib/recipe-url.js';
 import { getEquivalentWhiteBalance } from '../../../lib/whiteBalanceEquivalence.js';
 
 const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, userId = null) {
     const v = String(idOrSlug ?? '').trim();
     if (!v) return null;
     // Detect UUID format to avoid a Postgres type error when the param is a slug.
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+    const isUuid = isUuidLike(v);
     const rows = await db
         .select({
             id: recipes.id,
@@ -240,6 +241,9 @@ export default async function Page({ params }) {
     const userId = session?.user?.id ?? null;
     const recipe = await getRecipeByIdOrSlug(id, userId);
     if (!recipe) return notFound();
+    if (isUuidLike(id) && recipe.uuid === id && recipe.slug && recipe.slug !== id) {
+        permanentRedirect(getRecipePath(recipe));
+    }
     const whiteBalance = getEquivalentWhiteBalance(recipe);
     const relatedWhiteBalanceRecipes = await getRelatedWhiteBalanceRecipes(recipe.id, whiteBalance);
 
@@ -300,7 +304,7 @@ export default async function Page({ params }) {
                             {relatedWhiteBalanceRecipes.map((relatedRecipe) => (
                                 <Link
                                     key={relatedRecipe.id}
-                                    href={`/recipes/${relatedRecipe.uuid ?? relatedRecipe.slug}`}
+                                    href={getRecipePath(relatedRecipe)}
                                     className="rounded-full border border-border/70 bg-muted/30 px-4 py-2 text-sm transition-colors hover:border-primary/35 hover:text-foreground"
                                 >
                                     {relatedRecipe.recipeName}

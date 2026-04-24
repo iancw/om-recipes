@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import SaturationWheel from './SaturationWheel.jsx';
+import { getRecipePath } from '../lib/recipe-url.js';
 import SlotRow from './SlotRow.jsx';
 import { Button } from './ui/button.jsx';
 import { Input } from './ui/input.jsx';
@@ -77,7 +78,7 @@ function RecipeRow({ recipe, modePosition, onAssign, isPending }) {
                 <div className="min-w-0 flex-1">
                     {recipe.slug ? (
                         <a
-                            href={`/recipes/${recipe.slug}`}
+                            href={getRecipePath(recipe)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="truncate inline text-sm font-medium hover:underline"

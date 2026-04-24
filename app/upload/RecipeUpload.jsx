@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from 'components/ui/card';
 import { Input } from 'components/ui/input';
 import { Textarea } from 'components/ui/textarea';
 import { cn } from 'lib/cn';
+import { getRecipePath } from 'lib/recipe-url.js';
 
 export default function RecipeUpload({ initialAuthor = "" }) {
   const FINALIZING_NOTICE_DELAY_MS = 5000;
@@ -418,15 +419,15 @@ export default function RecipeUpload({ initialAuthor = "" }) {
 
     if (hasRedirectedRef.current) return;
 
-    const recipeId =
-      lastUploadMode === 'attach'
-        ? (uploadedRecipeUuid || matchingRecipe?.uuid || matchingRecipe?.slug || uploadedSlug)
-        : (uploadedRecipeUuid || uploadedSlug);
+    const recipeHref = getRecipePath({
+      slug: matchingRecipe?.slug || uploadedSlug,
+      uuid: matchingRecipe?.uuid || uploadedRecipeUuid
+    });
 
-    if (!recipeId) return;
+    if (recipeHref === '/recipes') return;
 
     hasRedirectedRef.current = true;
-    router.push(`/recipes/${encodeURIComponent(recipeId)}`);
+    router.push(recipeHref);
   }, [uploadStatus, uploadedSlug, uploadedRecipeUuid, matchingRecipe, lastUploadMode, router]);
 
   return (
@@ -436,9 +437,11 @@ export default function RecipeUpload({ initialAuthor = "" }) {
           <div className="mb-3">
             <Alert type="success">
               {lastUploadMode === 'attach' ? (() => {
-                const matchId = matchingRecipe?.uuid ?? matchingRecipe?.slug ?? uploadedRecipeUuid ?? uploadedSlug;
-                const linkHref = matchId ? `/recipes/${encodeURIComponent(matchId)}` : '/recipes';
-                const linkLabel = matchingRecipe?.recipeName || matchId || 'View recipe';
+                const linkHref = getRecipePath({
+                  slug: matchingRecipe?.slug || uploadedSlug,
+                  uuid: matchingRecipe?.uuid || uploadedRecipeUuid
+                });
+                const linkLabel = matchingRecipe?.recipeName || matchingRecipe?.slug || uploadedSlug || 'View recipe';
                 return (
                   <>
                     Image attached as a community sample for&nbsp;
@@ -448,8 +451,8 @@ export default function RecipeUpload({ initialAuthor = "" }) {
               })() : (
                 <>
                   Recipe uploaded!{' '}
-                  {(uploadedRecipeUuid || uploadedSlug) ? (
-                    <Link href={`/recipes/${encodeURIComponent(uploadedRecipeUuid || uploadedSlug)}`}>
+                  {getRecipePath({ slug: uploadedSlug, uuid: uploadedRecipeUuid }) !== '/recipes' ? (
+                    <Link href={getRecipePath({ slug: uploadedSlug, uuid: uploadedRecipeUuid })}>
                       View recipe
                     </Link>
                   ) : null}
@@ -566,9 +569,8 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                 <>
                   <Alert>
                     {(() => {
-                      const matchId = matchingRecipe.uuid ?? matchingRecipe.slug ?? '';
-                      const linkHref = matchId ? `/recipes/${encodeURIComponent(matchId)}` : '/recipes';
-                      const linkLabel = matchingRecipe.recipeName || matchId || 'View recipe';
+                      const linkHref = getRecipePath(matchingRecipe);
+                      const linkLabel = matchingRecipe.recipeName || matchingRecipe.slug || 'View recipe';
                       const intro = matchType === 'no-wb'
                         ? 'A recipe with these settings already exists (white balance differs):'
                         : matchType === 'color-tone'
@@ -644,6 +646,10 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                         duplicateMatch.recipeUuid ||
                         duplicateMatch.recipeId ||
                         '';
+                      const recipeHref = getRecipePath({
+                        slug: duplicateMatch.recipeSlug,
+                        uuid: duplicateMatch.recipeUuid
+                      });
                       const recipeLabel =
                         duplicateMatch.recipeName ||
                         recipeId ||
@@ -651,8 +657,8 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                       return (
                         <>
                           This image already exists on the site for{' '}
-                          {recipeId ? (
-                            <Link href={`/recipes/${encodeURIComponent(recipeId)}`}>
+                          {recipeHref !== '/recipes' ? (
+                            <Link href={recipeHref}>
                               {recipeLabel}
                             </Link>
                           ) : (
@@ -675,9 +681,8 @@ export default function RecipeUpload({ initialAuthor = "" }) {
               {!matchingRecipe && !duplicateMatch && similarRecipes.length > 0 && (
                 <div className="flex flex-col gap-2">
                   {similarRecipes.map(({ type, recipe, label }) => {
-                    const matchId = recipe.uuid ?? recipe.slug ?? '';
-                    const linkHref = matchId ? `/recipes/${encodeURIComponent(matchId)}` : '/recipes';
-                    const linkLabel = recipe.recipeName || matchId || 'View recipe';
+                    const linkHref = getRecipePath(recipe);
+                    const linkLabel = recipe.recipeName || recipe.slug || 'View recipe';
                     if (type === 'color') {
                       return (
                         <Alert key={type}>

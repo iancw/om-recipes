@@ -19,6 +19,7 @@ import {
     computeNoWbFingerprint
 } from '../../lib/recipeFingerprint.js';
 import { findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
+import { getRecipePath } from '../../lib/recipe-url.js';
 
 const ORIGINAL_BUCKET = process.env.OCI_IMAGES_ORIGINAL_BUCKET;
 const RESIZED_BUCKET = process.env.OCI_IMAGES_PROCESSED_BUCKET;
@@ -303,9 +304,12 @@ export async function prepareRecipeUploadAction({ parameters }) {
                 errorMessage += ` for "${duplicate.recipeName}"`;
             }
 
-            const recipeIdentifier = duplicate.recipeSlug || duplicate.recipeUuid || duplicate.recipeId;
-            if (recipeIdentifier) {
-                errorMessage += `. View it at /recipes/${recipeIdentifier}.`;
+            const recipePath = getRecipePath({
+                slug: duplicate.recipeSlug,
+                uuid: duplicate.recipeUuid
+            });
+            if (recipePath !== '/recipes') {
+                errorMessage += `. View it at ${recipePath}.`;
             } else {
                 errorMessage += '.';
             }

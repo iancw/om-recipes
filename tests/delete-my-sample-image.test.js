@@ -74,7 +74,7 @@ describe('deleteMySampleImageAction', () => {
         await deleteMySampleImageAction({ recipeId: 123, imageId: 456 });
 
         expect(deleteMock).toHaveBeenCalledTimes(1);
-        expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/recipe-uuid');
+        expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/recipe-slug');
         expect(revalidatePathMock).toHaveBeenCalledWith('/');
         expect(revalidatePathMock).toHaveBeenCalledWith('/my-samples');
     });

@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import DeleteConfirmationModal from './DeleteConfirmationModal.jsx';
+import { getRecipePath } from '../lib/recipe-url.js';
 import { Badge } from './ui/badge.jsx';
 import { Button } from './ui/button.jsx';
 import { Card, CardContent } from './ui/card.jsx';
@@ -54,7 +55,7 @@ export default function MySamplesGrid({ samples, deleteSampleAction }) {
       <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 w-full">
         {normalizedSamples.map((sample) => {
           const previewUrl = sample.image.smallUrl ?? sample.image.fullSizeUrl;
-          const recipeHref = `/recipes/${encodeURIComponent(sample.recipeUuid ?? sample.recipeSlug)}`;
+          const recipeHref = getRecipePath({ slug: sample.recipeSlug, uuid: sample.recipeUuid });
           return (
             <li key={`${sample.recipeId}:${sample.image.id}`} className="relative">
               <Card className="h-full overflow-hidden border-border/70 bg-card/80 transition-transform duration-200 hover:-translate-y-1 hover:border-primary/35 hover:shadow-xl">

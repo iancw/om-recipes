@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server.js';
 
 vi.mock('../lib/auth.js', () => ({
     consumeMagicLink: vi.fn(),
+    getSession: vi.fn(),
     logoutCurrentSession: vi.fn(),
     normalizeRedirectPath: vi.fn((value, fallback = '/') => {
         const candidate = String(value ?? '').trim();
@@ -12,9 +13,10 @@ vi.mock('../lib/auth.js', () => ({
     })
 }));
 
-import { consumeMagicLink, logoutCurrentSession } from '../lib/auth.js';
+import { consumeMagicLink, getSession, logoutCurrentSession } from '../lib/auth.js';
 import { GET as verifyRouteGet } from '../app/auth/verify/route.js';
 import { GET as logoutRouteGet, POST as logoutRoutePost } from '../app/auth/logout/route.js';
+import { GET as sessionRouteGet } from '../app/auth/session/route.js';
 
 const ORIGINAL_ENV = {
     APP_BASE_URL: process.env.APP_BASE_URL,
@@ -74,5 +76,42 @@ describe('auth route cookies', () => {
 
         expect(logoutCurrentSession).toHaveBeenCalledTimes(1);
         expect(response.headers.get('location')).toBe('https://www.omrecipes.dev/login');
+    });
+
+    it('returns a non-cacheable null session payload for anonymous users', async () => {
+        vi.mocked(getSession).mockResolvedValue(null);
+
+        const response = await sessionRouteGet();
+
+        expect(response.headers.get('cache-control')).toBe('private, no-store, max-age=0');
+        await expect(response.json()).resolves.toEqual({ user: null });
+    });
+
+    it('returns a trimmed user payload for authenticated users', async () => {
+        vi.mocked(getSession).mockResolvedValue({
+            user: {
+                id: 42,
+                uuid: 'user-uuid',
+                email: 'ian@example.com',
+                name: 'Ian',
+                emailVerifiedAt: new Date('2026-04-23T00:00:00Z')
+            },
+            author: null,
+            session: {
+                id: 99,
+                expiresAt: new Date('2026-05-01T00:00:00Z')
+            }
+        });
+
+        const response = await sessionRouteGet();
+
+        await expect(response.json()).resolves.toEqual({
+            user: {
+                id: 42,
+                uuid: 'user-uuid',
+                email: 'ian@example.com',
+                name: 'Ian'
+            }
+        });
     });
 });

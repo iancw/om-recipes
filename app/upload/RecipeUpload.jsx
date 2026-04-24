@@ -10,8 +10,8 @@ import {
   checkImageDuplicateAction
 } from './actions';
 import RecipeSettings from "components/RecipeSettings";
-import { parseMetadata } from '@uswriting/exiftool';
-import {parseRecipeSettingsFromExif} from 'lib/exifparse'
+import { dispose as disposeExifTool, parseMetadata } from '@uswriting/exiftool';
+import { parseRecipeSettingsFromExif, RECIPE_EXIFTOOL_ARGS } from 'lib/exifparse';
 import { Alert } from 'components/alert';
 import { Button, buttonVariants } from 'components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from 'components/ui/card';
@@ -138,58 +138,6 @@ export default function RecipeUpload({ initialAuthor = "" }) {
   }, [hasDroppedImage, recipe]);
 
   useEffect(() => {
-    if (!imageHashHex) return;
-
-    let cancelled = false;
-    setIsCheckingDuplicate(true);
-    setDuplicateError('');
-
-    checkImageDuplicateAction({
-      parameters: {
-        sha256: imageHashHex
-      }
-    })
-      .then((res) => {
-        if (cancelled) return;
-        if (!res?.ok) {
-          setDuplicateMatch(null);
-          setDuplicateError(res?.error || 'Failed to check for duplicate images.');
-          return;
-        }
-        if (res.duplicate) {
-          setDuplicateMatch(res.duplicate);
-          const recipeLabel =
-            res.duplicate.recipeName ||
-            res.duplicate.recipeSlug ||
-            res.duplicate.recipeUuid ||
-            res.duplicate.recipeId ||
-            '';
-          const message = recipeLabel
-            ? `This image already exists on the site for "${recipeLabel}". Please select another image.`
-            : 'This image already exists on the site. Please select another image.';
-          setDuplicateError(message);
-        } else {
-          setDuplicateMatch(null);
-          setDuplicateError('');
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error(err);
-        setDuplicateMatch(null);
-        setDuplicateError(err?.message || 'Failed to check for duplicate images.');
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setIsCheckingDuplicate(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [imageHashHex]);
-
-  useEffect(() => {
     if (uploadStatus !== 'uploading' || uploadPhase !== 'finalizing') {
       setShowFinalizingNotice(false);
       return;
@@ -205,8 +153,66 @@ export default function RecipeUpload({ initialAuthor = "" }) {
   }, [uploadPhase, uploadStatus]);
 
   const parseExif = async (file) => {
-    const result = await parseMetadata(file)
-    return parseRecipeSettingsFromExif(result.data)
+    try {
+      const result = await parseMetadata(file, {
+        args: RECIPE_EXIFTOOL_ARGS
+      });
+      if (!result?.success) {
+        throw new Error(result?.error || 'Unable to read EXIF metadata');
+      }
+      return parseRecipeSettingsFromExif(result.data);
+    } finally {
+      // Release the cached WASM/virtual filesystem once parsing completes to
+      // keep mobile Safari from carrying that memory through the rest of upload.
+      await disposeExifTool().catch(() => {});
+    }
+  };
+
+  const checkDuplicateByHash = async (sha256) => {
+    if (!sha256) return null;
+
+    setIsCheckingDuplicate(true);
+    setDuplicateError('');
+
+    try {
+      const res = await checkImageDuplicateAction({
+        parameters: {
+          sha256
+        }
+      });
+
+      if (!res?.ok) {
+        setDuplicateMatch(null);
+        setDuplicateError(res?.error || 'Failed to check for duplicate images.');
+        return null;
+      }
+
+      if (res.duplicate) {
+        setDuplicateMatch(res.duplicate);
+        const recipeLabel =
+          res.duplicate.recipeName ||
+          res.duplicate.recipeSlug ||
+          res.duplicate.recipeUuid ||
+          res.duplicate.recipeId ||
+          '';
+        const message = recipeLabel
+          ? `This image already exists on the site for "${recipeLabel}". Please select another image.`
+          : 'This image already exists on the site. Please select another image.';
+        setDuplicateError(message);
+        return res.duplicate;
+      }
+
+      setDuplicateMatch(null);
+      setDuplicateError('');
+      return null;
+    } catch (err) {
+      console.error(err);
+      setDuplicateMatch(null);
+      setDuplicateError(err?.message || 'Failed to check for duplicate images.');
+      return null;
+    } finally {
+      setIsCheckingDuplicate(false);
+    }
   };
 
   const ensureImageHash = async (file) => {
@@ -249,10 +255,6 @@ export default function RecipeUpload({ initialAuthor = "" }) {
       if (file && !name?.trim()) {
         const base = String(file.name || '').replace(/\.[a-z0-9]+$/i, '').trim();
         if (base) setName(base);
-      }
-
-      if (file) {
-        await ensureImageHash(file);
       }
 
       const recipe = await parseExif(file);
@@ -338,6 +340,13 @@ export default function RecipeUpload({ initialAuthor = "" }) {
       }
 
       const digest = await ensureImageHash(file);
+      const duplicate = await checkDuplicateByHash(digest);
+      if (duplicate) {
+        setUploadStatus('error');
+        setUploadError('This image already exists on the site. Please select another image.');
+        setUploadPhase('');
+        return;
+      }
 
       setUploadPhase('preparing');
       const prep = await prepareRecipeUploadAction({

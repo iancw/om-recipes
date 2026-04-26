@@ -1,16 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Readable } from 'node:stream';
 
 let selectMock = vi.fn();
 let insertMock = vi.fn();
 let updateMock = vi.fn();
+let deleteMock = vi.fn();
 let transactionMock = vi.fn();
 let headObjectMock = vi.fn();
+let getObjectMock = vi.fn();
+let deleteObjectMock = vi.fn();
 let invokeMock = vi.fn();
 let requireUserMock = vi.fn();
 let finalizeRecipeUploadAction;
 let ResizeTimeoutError;
 let updateSetCalls = [];
 let insertValuesCalls = [];
+let deleteWhereCalls = [];
 let consoleWarnMock;
 let selectedImageRow = null;
 const originalDisableUploadsEnv = process.env.NEXT_PUBLIC_DISABLE_UPLOADS;
@@ -35,7 +40,9 @@ vi.mock('../lib/oci/functionsInvoke.js', () => ({
 vi.mock('../lib/oci/objectStorage.js', () => ({
     getObjectStorageClientFromEnv: () => ({}),
     getObjectStorageNamespaceFromEnv: () => 'namespace',
-    headObject: (...args) => headObjectMock(...args)
+    headObject: (...args) => headObjectMock(...args),
+    getObject: (...args) => getObjectMock(...args),
+    deleteObject: (...args) => deleteObjectMock(...args)
 }));
 
 vi.mock('../db/index.ts', () => ({
@@ -43,6 +50,7 @@ vi.mock('../db/index.ts', () => ({
         select: (...args) => selectMock(...args),
         insert: (...args) => insertMock(...args),
         update: (...args) => updateMock(...args),
+        delete: (...args) => deleteMock(...args),
         transaction: (...args) => transactionMock(...args)
     }
 }));
@@ -62,6 +70,7 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
             authorUserId: 3,
             smallUrl: null,
             fullSizeUrl: null,
+            sha256Hash: 'f'.repeat(64),
             originalFileSize: 100,
             preparedRecipeId: 1,
             preparedObjectKey: 'authors/foo/recipes/img.jpg',
@@ -69,7 +78,10 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
         };
         updateSetCalls = [];
         insertValuesCalls = [];
+        deleteWhereCalls = [];
         headObjectMock = vi.fn();
+        getObjectMock = vi.fn();
+        deleteObjectMock = vi.fn();
         invokeMock = vi.fn();
         requireUserMock = vi.fn(async () => ({
             user: {
@@ -77,7 +89,10 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
                 email: 'owner@example.com'
             }
         }));
-        selectMock = vi.fn(() => makeSelectChain(selectedImageRow ? [selectedImageRow] : []));
+        selectMock = vi
+            .fn()
+            .mockImplementationOnce(() => makeSelectChain(selectedImageRow ? [selectedImageRow] : []))
+            .mockImplementation(() => makeSelectChain([]));
         insertMock = vi.fn(() => ({
             values: vi.fn((values) => {
                 insertValuesCalls.push(values);
@@ -90,10 +105,17 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
                 return { where: () => Promise.resolve([]) };
             }
         }));
+        deleteMock = vi.fn(() => ({
+            where: (value) => {
+                deleteWhereCalls.push(value);
+                return Promise.resolve([]);
+            }
+        }));
         transactionMock = vi.fn(async (callback) =>
             callback({
                 insert: (...args) => insertMock(...args),
-                update: (...args) => updateMock(...args)
+                update: (...args) => updateMock(...args),
+                delete: (...args) => deleteMock(...args)
             })
         );
 
@@ -258,6 +280,56 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
         expect(transactionMock).not.toHaveBeenCalled();
         expect(updateSetCalls).toHaveLength(0);
         expect(insertValuesCalls).toHaveLength(0);
+    });
+
+    it('rejects finalize when the uploaded image is a duplicate and cleans up the prepared upload', async () => {
+        selectedImageRow.sha256Hash = null;
+        headObjectMock.mockResolvedValueOnce({ contentLength: 100 });
+        getObjectMock.mockResolvedValueOnce({
+            value: Readable.from([Buffer.from('duplicate-image-data')])
+        });
+        deleteObjectMock.mockResolvedValueOnce({});
+        selectMock = vi
+            .fn()
+            .mockReturnValueOnce(makeSelectChain([selectedImageRow]))
+            .mockReturnValueOnce(
+                makeSelectChain([
+                    { id: 900 }
+                ])
+            )
+            .mockReturnValueOnce(
+                makeSelectChain([
+                    {
+                        recipeId: 77,
+                        recipeSlug: 'existing-slug',
+                        recipeUuid: 'existing-uuid',
+                        recipeName: 'Existing Recipe'
+                    }
+                ])
+            )
+            .mockReturnValueOnce(makeSelectChain([]));
+
+        const result = await finalizeRecipeUploadAction({
+            parameters: {
+                imageId: 2,
+                originalFileSize: 100
+            }
+        });
+
+        expect(result).toEqual({
+            ok: false,
+            error: 'This image is already on OM Recipes as a sample image for "Existing Recipe". View it at /recipes/existing-slug.'
+        });
+        expect(deleteObjectMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                bucketName: process.env.OCI_IMAGES_ORIGINAL_BUCKET,
+                objectName: 'authors/foo/recipes/img.jpg'
+            })
+        );
+        expect(deleteWhereCalls).toHaveLength(1);
+        expect(updateSetCalls).toHaveLength(0);
+        expect(insertValuesCalls).toHaveLength(0);
+        expect(invokeMock).not.toHaveBeenCalled();
     });
 
     it('continues when resize invoke fails after finalize succeeds', async () => {

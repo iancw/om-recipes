@@ -6,8 +6,7 @@ import { useDropzone } from "react-dropzone";
 import {
   finalizeRecipeUploadAction,
   prepareRecipeUploadAction,
-  findRecipeMatchAction,
-  checkImageDuplicateAction
+  findRecipeMatchAction
 } from './actions';
 import RecipeSettings from "components/RecipeSettings";
 import { dispose as disposeExifTool, parseMetadata } from '@uswriting/exiftool';
@@ -19,6 +18,8 @@ import { Input } from 'components/ui/input';
 import { Textarea } from 'components/ui/textarea';
 import { cn } from 'lib/cn';
 import { getRecipePath } from 'lib/recipe-url.js';
+import { createUploadPreviewUrl, shouldDisableUploadPreview } from 'lib/upload-preview.js';
+import { getUploadProgressMessage } from 'lib/upload-status.js';
 
 export default function RecipeUpload({ initialAuthor = "" }) {
   const FINALIZING_NOTICE_DELAY_MS = 5000;
@@ -30,6 +31,8 @@ export default function RecipeUpload({ initialAuthor = "" }) {
   const [sourceUrl, setSourceUrl] = useState("");
   const [imageFiles, setImageFiles] = useState([]);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [disablePreview, setDisablePreview] = useState(false);
+  const [isPreparingPreview, setIsPreparingPreview] = useState(false);
   const [recipe, setRecipeDetails] = useState(null)
   const [exifError, setExifError] = useState("");
   const [isParsingExif, setIsParsingExif] = useState(false);
@@ -44,30 +47,55 @@ export default function RecipeUpload({ initialAuthor = "" }) {
   const [matchError, setMatchError] = useState('');
   const [isCheckingMatch, setIsCheckingMatch] = useState(false);
   const [lastUploadMode, setLastUploadMode] = useState('create'); // create | attach
-  const [imageHashHex, setImageHashHex] = useState('');
-  const [hashError, setHashError] = useState('');
-  const [duplicateMatch, setDuplicateMatch] = useState(null);
-  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
-  const [duplicateError, setDuplicateError] = useState('');
   const [missingColorProfile, setMissingColorProfile] = useState(false);
   const [showFinalizingNotice, setShowFinalizingNotice] = useState(false);
   const omWorkspaceWarning = recipe?.isOmWorkspace
     ? 'Warning: This JPG was produced by OM Workspace. JPGs produced by OM Workspace may not have accurate recipe data in EXIF. CAREFULLY CHECK the recipe data shown before uploading.'
     : '';
+  const uploadProgressMessage = getUploadProgressMessage(uploadPhase);
 
   const hasDroppedImage = imageFiles?.length > 0;
   const hasRedirectedRef = useRef(false);
 
   useEffect(() => {
-    if (!imageFiles?.length) {
+    setDisablePreview(shouldDisableUploadPreview(window.navigator?.deviceMemory));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let nextUrl = null;
+
+    if (!imageFiles?.length || disablePreview) {
+      setIsPreparingPreview(false);
       setPreviewUrl(null);
       return;
     }
 
-    const url = URL.createObjectURL(imageFiles[0]);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [imageFiles]);
+    setIsPreparingPreview(true);
+
+    createUploadPreviewUrl(imageFiles[0])
+      .then((url) => {
+        if (!active) {
+          if (url) URL.revokeObjectURL(url);
+          return;
+        }
+        nextUrl = url;
+        setPreviewUrl(url);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPreviewUrl(null);
+      })
+      .finally(() => {
+        if (!active) return;
+        setIsPreparingPreview(false);
+      });
+
+    return () => {
+      active = false;
+      if (nextUrl) URL.revokeObjectURL(nextUrl);
+    };
+  }, [disablePreview, imageFiles]);
 
   useEffect(() => {
     if (!hasDroppedImage || !recipe) {
@@ -168,87 +196,11 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     }
   };
 
-  const checkDuplicateByHash = async (sha256) => {
-    if (!sha256) return null;
-
-    setIsCheckingDuplicate(true);
-    setDuplicateError('');
-
-    try {
-      const res = await checkImageDuplicateAction({
-        parameters: {
-          sha256
-        }
-      });
-
-      if (!res?.ok) {
-        setDuplicateMatch(null);
-        setDuplicateError(res?.error || 'Failed to check for duplicate images.');
-        return null;
-      }
-
-      if (res.duplicate) {
-        setDuplicateMatch(res.duplicate);
-        const recipeLabel =
-          res.duplicate.recipeName ||
-          res.duplicate.recipeSlug ||
-          res.duplicate.recipeUuid ||
-          res.duplicate.recipeId ||
-          '';
-        const message = recipeLabel
-          ? `This image already exists on the site for "${recipeLabel}". Please select another image.`
-          : 'This image already exists on the site. Please select another image.';
-        setDuplicateError(message);
-        return res.duplicate;
-      }
-
-      setDuplicateMatch(null);
-      setDuplicateError('');
-      return null;
-    } catch (err) {
-      console.error(err);
-      setDuplicateMatch(null);
-      setDuplicateError(err?.message || 'Failed to check for duplicate images.');
-      return null;
-    } finally {
-      setIsCheckingDuplicate(false);
-    }
-  };
-
-  const ensureImageHash = async (file) => {
-    if (!file) {
-      throw new Error('Missing image file');
-    }
-    if (imageHashHex) return imageHashHex;
-    if (typeof window === 'undefined' || !window.crypto?.subtle) {
-      throw new Error('Secure hashing is not supported in this browser');
-    }
-    try {
-      const buffer = await file.arrayBuffer();
-      const hashBuffer = await window.crypto.subtle.digest('SHA-256', buffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-      setImageHashHex(hex);
-      setHashError('');
-      return hex;
-    } catch (err) {
-      const message = err?.message || 'Unable to fingerprint image';
-      setImageHashHex('');
-      setHashError(message);
-      throw new Error(message);
-    }
-  };
-
   const onDrop = async (acceptedFiles) => {
     const file = acceptedFiles?.[0];
     setImageFiles(acceptedFiles);
     setExifError("");
     setIsParsingExif(true);
-    setImageHashHex('');
-    setHashError('');
-    setDuplicateMatch(null);
-    setDuplicateError('');
-    setIsCheckingDuplicate(false);
     setMissingColorProfile(false);
     try {
       // Best-effort prefill of recipe name from filename.
@@ -283,11 +235,6 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     setRecipeDetails(null);
     setExifError("");
     setIsParsingExif(false);
-    setImageHashHex('');
-    setHashError('');
-    setDuplicateMatch(null);
-    setDuplicateError('');
-    setIsCheckingDuplicate(false);
     setMatchingRecipe(null);
     setMatchType(null);
     setSimilarRecipes([]);
@@ -315,7 +262,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     const { attachToCommunity = false } = options;
 
     setUploadStatus('uploading');
-    setUploadPhase('hashing');
+    setUploadPhase('preparing');
     setUploadError('');
     setUploadedSlug('');
     setUploadedRecipeUuid('');
@@ -326,36 +273,13 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     try {
       const file = imageFiles[0] || null;
       if (!file) throw new Error('Missing image file');
-      if (duplicateMatch) {
-        setUploadStatus('error');
-        setUploadError('This image already exists on the site. Please select another image.');
-        setUploadPhase('');
-        return;
-      }
-      if (isCheckingDuplicate) {
-        setUploadStatus('error');
-        setUploadError('Still checking for duplicate images. Please wait a moment and try again.');
-        setUploadPhase('');
-        return;
-      }
-
-      const digest = await ensureImageHash(file);
-      const duplicate = await checkDuplicateByHash(digest);
-      if (duplicate) {
-        setUploadStatus('error');
-        setUploadError('This image already exists on the site. Please select another image.');
-        setUploadPhase('');
-        return;
-      }
-
-      setUploadPhase('preparing');
       const prep = await prepareRecipeUploadAction({
         parameters: {
           author,
           name,
           notes,
           sourceUrl,
-          imageMeta: { name: file.name, type: file.type, size: file.size, sha256: digest },
+          imageMeta: { name: file.name, type: file.type, size: file.size },
           recipeSettings: recipe
         }
       });
@@ -481,6 +405,16 @@ export default function RecipeUpload({ initialAuthor = "" }) {
             <Alert type="error">Upload error: {uploadError}</Alert>
           </div>
         )}
+        {hasDroppedImage && uploadStatus === 'uploading' && (
+          <div className="mb-3">
+            <Alert>
+              <div className="flex flex-col gap-1">
+                <p className="m-0 text-sm font-medium text-foreground">{uploadProgressMessage.title}</p>
+                <p className="m-0 text-sm leading-6 text-muted-foreground">{uploadProgressMessage.body}</p>
+              </div>
+            </Alert>
+          </div>
+        )}
         {hasDroppedImage && showFinalizingNotice && (
           <div className="mb-3">
             <Alert>
@@ -514,12 +448,20 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                 )}
                 {hasDroppedImage && (
                   <div className="relative mt-2 inline-block">
-                    {!!previewUrl && (
+                    {!!previewUrl && !disablePreview && (
                       <img
                         src={previewUrl}
                         alt="Preview"
                         className="block max-h-[120px] max-w-[120px] rounded-xl border border-border/60 object-cover"
                       />
+                    )}
+                    {hasDroppedImage && !previewUrl && !disablePreview && isPreparingPreview && (
+                      <p className="mt-1 text-xs text-muted-foreground">Preparing preview…</p>
+                    )}
+                    {hasDroppedImage && disablePreview && (
+                      <p className="mt-1 max-w-[120px] text-xs text-muted-foreground">
+                        Preview is disabled on this device to reduce memory use during upload.
+                      </p>
                     )}
                     <button
                       type="button"
@@ -537,20 +479,9 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                   </div>
                 )}
                 {isParsingExif && <p className="mt-3 text-sm text-muted-foreground">Reading EXIF…</p>}
-                {uploadStatus === 'uploading' && uploadPhase === 'hashing' && (
-                  <p className="mt-3 text-sm text-muted-foreground">Computing image fingerprint…</p>
-                )}
-                {isCheckingDuplicate && (
-                  <p className="mt-3 text-sm text-muted-foreground">Checking for existing uploads…</p>
-                )}
                 {!!exifError && (
                   <p className="mt-2 text-sm text-destructive">
                     {exifError}
-                  </p>
-                )}
-                {!!hashError && (
-                  <p className="mt-2 text-sm text-destructive">
-                    Fingerprint error: {hashError}
                   </p>
                 )}
               </div>
@@ -560,9 +491,6 @@ export default function RecipeUpload({ initialAuthor = "" }) {
             )}
             {hasDroppedImage && matchError && (
               <Alert type="error">{matchError}</Alert>
-            )}
-            {hasDroppedImage && !duplicateMatch && !!duplicateError && (
-              <Alert type="error">{duplicateError}</Alert>
             )}
             {hasDroppedImage && !!omWorkspaceWarning && (
               <Alert>{omWorkspaceWarning}</Alert>
@@ -596,7 +524,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                       );
                     })()}
                   </Alert>
-                  {!duplicateMatch && matchType === 'full' && (
+                  {matchType === 'full' && (
                     <>
                       <p className="m-0 text-sm leading-6 text-muted-foreground">
                         Continue below to attach your image as a community sample or choose a different photo.
@@ -608,14 +536,11 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                             uploadStatus === 'uploading' ||
                             isParsingExif ||
                             !recipe ||
-                            !imageFiles?.length ||
-                            isCheckingDuplicate
+                            !imageFiles?.length
                           }
                         >
                           {uploadStatus === 'uploading'
-                            ? (uploadPhase === 'hashing'
-                              ? 'Computing fingerprint…'
-                              : uploadPhase === 'preparing'
+                            ? (uploadPhase === 'preparing'
                                 ? 'Preparing…'
                                 : uploadPhase === 'direct-upload'
                                   ? 'Uploading to storage…'
@@ -646,48 +571,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                   )}
                 </>
               )}
-              {duplicateMatch && (
-                <>
-                  <Alert type="error">
-                    {(() => {
-                      const recipeId =
-                        duplicateMatch.recipeSlug ||
-                        duplicateMatch.recipeUuid ||
-                        duplicateMatch.recipeId ||
-                        '';
-                      const recipeHref = getRecipePath({
-                        slug: duplicateMatch.recipeSlug,
-                        uuid: duplicateMatch.recipeUuid
-                      });
-                      const recipeLabel =
-                        duplicateMatch.recipeName ||
-                        recipeId ||
-                        'the existing recipe';
-                      return (
-                        <>
-                          This image already exists on the site for{' '}
-                          {recipeHref !== '/recipes' ? (
-                            <Link href={recipeHref}>
-                              {recipeLabel}
-                            </Link>
-                          ) : (
-                            recipeLabel
-                          )}
-                          . Please select another image.
-                        </>
-                      );
-                    })()}
-                  </Alert>
-                  <button
-                    type="button"
-                    className={buttonVariants({ variant: 'outline', className: 'self-start' })}
-                    onClick={handleRemoveImage}
-                  >
-                    Choose different image
-                  </button>
-                </>
-              )}
-              {!matchingRecipe && !duplicateMatch && similarRecipes.length > 0 && (
+              {!matchingRecipe && similarRecipes.length > 0 && (
                 <div className="flex flex-col gap-2">
                   {similarRecipes.map(({ type, recipe, label }) => {
                     const linkHref = getRecipePath(recipe);
@@ -712,7 +596,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                   })}
                 </div>
               )}
-              {!matchingRecipe && !duplicateMatch && (
+              {!matchingRecipe && (
                 <>
                   <label className="flex w-full flex-col gap-2">
                     <span className="text-sm font-medium text-foreground">Author Name</span>
@@ -758,14 +642,11 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                       uploadStatus === 'uploading' ||
                       isParsingExif ||
                       !recipe ||
-                      !imageFiles?.length ||
-                      isCheckingDuplicate
+                      !imageFiles?.length
                     }
                   >
                     {uploadStatus === 'uploading'
-                      ? (uploadPhase === 'hashing'
-                        ? 'Computing fingerprint…'
-                        : uploadPhase === 'preparing'
+                      ? (uploadPhase === 'preparing'
                           ? 'Preparing…'
                           : uploadPhase === 'direct-upload'
                             ? 'Uploading to storage…'

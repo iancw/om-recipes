@@ -1,13 +1,15 @@
 'use server';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { db } from '../../db/index.ts';
 import { authors, images, recipeComparisonImages, recipeSampleImages, recipes } from '../../db/schema.ts';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import {
     getObjectStorageClientFromEnv,
     getObjectStorageNamespaceFromEnv,
+    getObject,
     headObject,
-    createPreauthenticatedRequest
+    createPreauthenticatedRequest,
+    deleteObject
 } from '../../lib/oci/objectStorage.js';
 import { invokeImageResizeFunction } from '../../lib/oci/functionsInvoke.js';
 import { ResizeTimeoutError } from './errors.js';
@@ -188,7 +190,11 @@ async function findExistingImageAssociationBySha(sha256) {
 
     if (existing.length === 0) return null;
 
-    const imageId = existing[0].id;
+    return findExistingImageAssociationByImageId(existing[0].id);
+}
+
+async function findExistingImageAssociationByImageId(imageId) {
+    if (!imageId) return null;
 
     const [sampleRows, comparisonRows] = await Promise.all([
         db
@@ -241,6 +247,78 @@ async function findExistingImageAssociationBySha(sha256) {
     };
 }
 
+async function findExistingImageAssociationByShaExcludingImage(sha256, excludeImageId) {
+    if (!sha256) return null;
+
+    const conditions = [eq(images.sha256Hash, sha256)];
+    if (excludeImageId) {
+        conditions.push(ne(images.id, excludeImageId));
+    }
+
+    const existing = await db
+        .select({ id: images.id })
+        .from(images)
+        .where(and(...conditions))
+        .limit(1);
+
+    if (existing.length === 0) return null;
+
+    return findExistingImageAssociationByImageId(existing[0].id);
+}
+
+function buildDuplicateImageErrorMessage(duplicate) {
+    const sampleLabel =
+        duplicate?.duplicateType === 'comparison'
+            ? 'a comparison image'
+            : 'a sample image';
+
+    let errorMessage = `This image is already on OM Recipes as ${sampleLabel}`;
+    if (duplicate?.recipeName) {
+        errorMessage += ` for "${duplicate.recipeName}"`;
+    }
+
+    const recipePath = getRecipePath({
+        slug: duplicate?.recipeSlug,
+        uuid: duplicate?.recipeUuid
+    });
+    if (recipePath !== '/recipes') {
+        errorMessage += `. View it at ${recipePath}.`;
+    } else {
+        errorMessage += '.';
+    }
+
+    return errorMessage;
+}
+
+async function sha256HexFromObjectStorageResponse(response) {
+    const body = response?.value ?? response?.body ?? response?.data ?? response;
+    const hash = createHash('sha256');
+
+    if (!body) {
+        throw new Error('Uploaded object body was empty');
+    }
+
+    if (typeof body.arrayBuffer === 'function') {
+        hash.update(Buffer.from(await body.arrayBuffer()));
+        return hash.digest('hex');
+    }
+
+    if (Buffer.isBuffer(body) || body instanceof Uint8Array) {
+        hash.update(body);
+        return hash.digest('hex');
+    }
+
+    if (typeof body[Symbol.asyncIterator] === 'function' || typeof body[Symbol.iterator] === 'function') {
+        for await (const chunk of body) {
+            if (!chunk) continue;
+            hash.update(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        return hash.digest('hex');
+    }
+
+    throw new Error('Unsupported uploaded object body type');
+}
+
 // Always be sanitizing data in real sites!
 export async function prepareRecipeUploadAction({ parameters }) {
     try {
@@ -284,48 +362,14 @@ export async function prepareRecipeUploadAction({ parameters }) {
            return { ok: false, error: 'Only JPEG (.jpg/.jpeg) images are accepted' };
        }
 
-        const imageSha = normalizeSha256(imageMeta?.sha256);
-        if (!imageSha) {
+        const rawSha = imageMeta?.sha256;
+        if (rawSha != null && rawSha !== '' && !normalizeSha256(rawSha)) {
             return {
                 ok: false,
                 error: 'Image checksum missing or invalid. Please reselect the file and try again.'
             };
         }
-
-        const duplicate = await findExistingImageAssociationBySha(imageSha);
-        if (duplicate) {
-            const sampleLabel =
-                duplicate.duplicateType === 'comparison'
-                    ? 'a comparison image'
-                    : 'a sample image';
-
-            let errorMessage = `This image is already on OM Recipes as ${sampleLabel}`;
-            if (duplicate.recipeName) {
-                errorMessage += ` for "${duplicate.recipeName}"`;
-            }
-
-            const recipePath = getRecipePath({
-                slug: duplicate.recipeSlug,
-                uuid: duplicate.recipeUuid
-            });
-            if (recipePath !== '/recipes') {
-                errorMessage += `. View it at ${recipePath}.`;
-            } else {
-                errorMessage += '.';
-            }
-
-            return {
-                ok: false,
-                error: errorMessage,
-                duplicate: {
-                    recipeId: duplicate.recipeId,
-                    recipeSlug: duplicate.recipeSlug,
-                    recipeUuid: duplicate.recipeUuid,
-                    duplicateType: duplicate.duplicateType,
-                    imageId: duplicate.imageId
-                }
-            };
-        }
+        const imageSha = normalizeSha256(rawSha);
 
         const authorRow = await findOrCreateAuthorForUser({
             userId: session.user.id,
@@ -534,6 +578,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
                 authorUserId: authors.userId,
                 smallUrl: images.smallUrl,
                 fullSizeUrl: images.fullSizeUrl,
+                sha256Hash: images.sha256Hash,
                 originalFileSize: images.originalFileSize,
                 preparedRecipeId: images.preparedRecipeId,
                 preparedObjectKey: images.preparedObjectKey,
@@ -611,10 +656,47 @@ export async function finalizeRecipeUploadAction({ parameters }) {
             };
         }
 
+        const imageSha =
+            normalizeSha256(img[0].sha256Hash) ??
+            (await sha256HexFromObjectStorageResponse(
+                await getObject({
+                    client,
+                    namespaceName,
+                    bucketName: ORIGINAL_BUCKET,
+                    objectName: preparedObjectKey
+                })
+            ));
+
+        const duplicate = await findExistingImageAssociationByShaExcludingImage(imageSha, requestedImageId);
+        if (duplicate) {
+            try {
+                await deleteObject({
+                    client,
+                    namespaceName,
+                    bucketName: ORIGINAL_BUCKET,
+                    objectName: preparedObjectKey
+                });
+            } catch (cleanupErr) {
+                console.warn('Prepared duplicate upload cleanup failed', {
+                    imageId: requestedImageId,
+                    objectKey: preparedObjectKey,
+                    error: cleanupErr?.message ?? String(cleanupErr)
+                });
+            }
+
+            await db.delete(images).where(eq(images.id, requestedImageId));
+
+            return {
+                ok: false,
+                error: buildDuplicateImageErrorMessage(duplicate)
+            };
+        }
+
         await db
             .update(images)
             .set({
                 fullSizeUrl,
+                sha256Hash: imageSha,
                 originalFileSize: expectedOriginalFileSize ?? null,
                 finalizedAt: new Date()
             })

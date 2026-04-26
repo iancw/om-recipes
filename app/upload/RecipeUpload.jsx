@@ -19,6 +19,7 @@ import { Textarea } from 'components/ui/textarea';
 import { cn } from 'lib/cn';
 import { getRecipePath } from 'lib/recipe-url.js';
 import { createUploadPreviewUrl, shouldDisableUploadPreview } from 'lib/upload-preview.js';
+import { getUploadProgressMessage } from 'lib/upload-status.js';
 
 export default function RecipeUpload({ initialAuthor = "" }) {
   const FINALIZING_NOTICE_DELAY_MS = 5000;
@@ -51,6 +52,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
   const omWorkspaceWarning = recipe?.isOmWorkspace
     ? 'Warning: This JPG was produced by OM Workspace. JPGs produced by OM Workspace may not have accurate recipe data in EXIF. CAREFULLY CHECK the recipe data shown before uploading.'
     : '';
+  const uploadProgressMessage = getUploadProgressMessage(uploadPhase);
 
   const hasDroppedImage = imageFiles?.length > 0;
   const hasRedirectedRef = useRef(false);
@@ -401,6 +403,16 @@ export default function RecipeUpload({ initialAuthor = "" }) {
         {hasDroppedImage && uploadStatus === 'error' && (
           <div className="mb-3">
             <Alert type="error">Upload error: {uploadError}</Alert>
+          </div>
+        )}
+        {hasDroppedImage && uploadStatus === 'uploading' && (
+          <div className="mb-3">
+            <Alert>
+              <div className="flex flex-col gap-1">
+                <p className="m-0 text-sm font-medium text-foreground">{uploadProgressMessage.title}</p>
+                <p className="m-0 text-sm leading-6 text-muted-foreground">{uploadProgressMessage.body}</p>
+              </div>
+            </Alert>
           </div>
         )}
         {hasDroppedImage && showFinalizingNotice && (

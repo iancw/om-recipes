@@ -208,18 +208,28 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(insertMock).toHaveBeenCalledTimes(2);
     });
 
-    it('rejects a duplicate image and reports its recipe association', async () => {
+    it('allows prepare without a client-provided image checksum', async () => {
         selectResults = [
-            [{ id: 99 }],
             [
                 {
-                    recipeId: 321,
-                    recipeSlug: 'existing-slug',
-                    recipeUuid: 'existing-uuid',
-                    recipeName: 'Existing Recipe'
+                    id: 321,
+                    uuid: 'matched-recipe-uuid',
+                    slug: 'existing-recipe',
+                    recipeName: 'Existing Recipe',
+                    authorName: 'Existing Author'
                 }
-            ],
-            []
+            ]
+        ];
+
+        insertHandlers = [
+            () => ({
+                values: vi.fn((values) => {
+                    capturedImageValues = values;
+                    return {
+                        returning: vi.fn(() => Promise.resolve([{ id: 888, uuid: 'image-uuid-1' }]))
+                    };
+                })
+            })
         ];
 
         const { prepareRecipeUploadAction } = await loadActionsModule();
@@ -229,12 +239,10 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
                 author: 'Author',
                 name: 'Recipe Name',
                 notes: '',
-                links: [],
                 imageMeta: {
                     name: 'photo.jpg',
                     type: 'image/jpeg',
-                    size: 2048,
-                    sha256: 'a'.repeat(64)
+                    size: 2048
                 },
                 recipeSettings: {
                     hasColorProfileSettings: true,
@@ -243,24 +251,18 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
             }
         });
 
-        expect(result.ok).toBe(false);
-        expect(result.duplicate).toEqual(
-            expect.objectContaining({
-                recipeSlug: 'existing-slug',
-                duplicateType: 'sample'
-            })
-        );
-        expect(result.error).toContain('Existing Recipe');
-        expect(result.error).toContain('/recipes/existing-slug');
-        expect(insertMock).not.toHaveBeenCalled();
-        expect(createParMock).not.toHaveBeenCalled();
-        expect(computeFingerprintMock).not.toHaveBeenCalled();
+        expect(result.ok).toBe(true);
+        expect(result.shouldCreateRecipe).toBe(false);
+        expect(result.recipeId).toBe(321);
+        expect(capturedImageValues.sha256Hash).toBeNull();
+        expect(insertMock).toHaveBeenCalledTimes(1);
+        expect(createParMock).toHaveBeenCalledTimes(1);
+        expect(computeFingerprintMock).toHaveBeenCalledTimes(1);
         expect(selectResults.length).toBe(0);
     });
 
     it('stores the image SHA-256 digest when creating upload metadata', async () => {
         selectResults = [
-            [],
             [],
             []
         ];
@@ -343,7 +345,6 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
 
     it('binds matched-recipe uploads to the existing recipe on the image row', async () => {
         selectResults = [
-            [],
             [
                 {
                     id: 321,

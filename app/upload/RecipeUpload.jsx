@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
@@ -8,7 +8,6 @@ import {
   prepareRecipeUploadAction,
   findRecipeMatchAction
 } from './actions';
-import RecipeSettings from "components/RecipeSettings";
 import { dispose as disposeExifTool, parseMetadata } from '@uswriting/exiftool';
 import { parseRecipeSettingsFromExif, RECIPE_EXIFTOOL_ARGS } from 'lib/exifparse';
 import { Alert } from 'components/alert';
@@ -20,6 +19,8 @@ import { cn } from 'lib/cn';
 import { getRecipePath } from 'lib/recipe-url.js';
 import { createUploadPreviewUrl, shouldDisableUploadPreview } from 'lib/upload-preview.js';
 import { getUploadProgressMessage } from 'lib/upload-status.js';
+import UploadPreviewThumb from './UploadPreviewThumb';
+import DetectedRecipeSettingsCard from './DetectedRecipeSettingsCard';
 
 export default function RecipeUpload({ initialAuthor = "" }) {
   const FINALIZING_NOTICE_DELAY_MS = 5000;
@@ -230,7 +231,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     }
   };
 
-  const handleRemoveImage = () => {
+  const handleRemoveImage = useCallback(() => {
     setImageFiles([]);
     setRecipeDetails(null);
     setExifError("");
@@ -247,7 +248,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     setUploadPhase('');
     setLastUploadMode('create');
     setMissingColorProfile(false);
-  };
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -447,36 +448,13 @@ export default function RecipeUpload({ initialAuthor = "" }) {
                   </p>
                 )}
                 {hasDroppedImage && (
-                  <div className="relative mt-2 inline-block">
-                    {!!previewUrl && !disablePreview && (
-                      <img
-                        src={previewUrl}
-                        alt="Preview"
-                        className="block max-h-[120px] max-w-[120px] rounded-xl border border-border/60 object-cover"
-                      />
-                    )}
-                    {hasDroppedImage && !previewUrl && !disablePreview && isPreparingPreview && (
-                      <p className="mt-1 text-xs text-muted-foreground">Preparing preview…</p>
-                    )}
-                    {hasDroppedImage && disablePreview && (
-                      <p className="mt-1 max-w-[120px] text-xs text-muted-foreground">
-                        Preview is disabled on this device to reduce memory use during upload.
-                      </p>
-                    )}
-                    <button
-                      type="button"
-                      aria-label="Remove photo"
-                      title="Remove photo"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleRemoveImage();
-                      }}
-                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card/95 text-sm leading-none shadow-sm"
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <UploadPreviewThumb
+                    fileName={imageFiles[0]?.name || ''}
+                    previewUrl={previewUrl}
+                    disablePreview={disablePreview}
+                    isPreparingPreview={isPreparingPreview}
+                    onRemoveImage={handleRemoveImage}
+                  />
                 )}
                 {isParsingExif && <p className="mt-3 text-sm text-muted-foreground">Reading EXIF…</p>}
                 {!!exifError && (
@@ -661,16 +639,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
             </Card>
           )}
         </div>
-        {hasDroppedImage && recipe && (
-          <Card className="mt-6 overflow-hidden border-border/70 bg-card/75">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Detected Recipe Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <RecipeSettings recipe={recipe} />
-            </CardContent>
-          </Card>
-        )}
+        {hasDroppedImage && recipe && <DetectedRecipeSettingsCard recipe={recipe} />}
       </form>
     </div>
   );

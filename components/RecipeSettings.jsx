@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import SaturationWheel from "./SaturationWheel";
 import ShadowMidsHighlightAdjust from "./ShadowMidsHighlightAdjust";
 import WhiteBalanceBox from "./white-balance-box";
@@ -8,7 +8,7 @@ import ImageAdjustSliders from "./ImageAdjustSliders";
  * Props:
  *  - recipe: the recipe data object as used in RecipeCard
  */
-export default function RecipeSettings({ recipe }) {
+function RecipeSettings({ recipe }) {
   return (
     <div className="recipe-card-settings-flex">
       <div
@@ -71,3 +71,5 @@ export default function RecipeSettings({ recipe }) {
     </div>
   );
 }
+
+export default memo(RecipeSettings);

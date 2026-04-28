@@ -252,18 +252,6 @@ export default async function Page({ params }) {
 
     return (
         <div className="flex w-full flex-col gap-8 pb-10 pt-2">
-            <Card className="overflow-hidden border-border/60 bg-card/80">
-                <CardContent className="space-y-4 p-6 lg:p-8">
-                    <Badge>Recipe Detail</Badge>
-                    <div className="space-y-3">
-                        <h1 className="max-w-4xl">{recipe.recipeName}</h1>
-                        <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
-                            Full recipe details, download links, and submitted sample images for {recipe.authorName}.
-                        </p>
-                    </div>
-                </CardContent>
-            </Card>
-
             <div>
                 <RecipeCard
                     recipe={recipe}

@@ -14,6 +14,16 @@ logger = logging.getLogger(__name__)
 if not logger.handlers:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 
+# Ordered so that the images that will be shown first are processed first
+RENDITION_SPECS = [
+    ("640", 640, 80),
+    ("1200", 1200, 82),
+    ("320", 320, 78),
+    ("960", 960, 82),
+    ("1600", 1600, 84),
+]
+MAX_BATCH_OBJECTS = 150
+
 
 def _redact(obj):
     """Redact common secret-bearing keys in nested dict/list structures."""
@@ -74,30 +84,58 @@ def _parse_object_create_event(payload: dict) -> Tuple[str, str]:
     return bucket, obj
 
 
-def parse_invocation_payload(payload: object) -> Tuple[str, str, Optional[str]]:
+def _normalize_batch_object_names(object_names):
+    if not isinstance(object_names, list) or not object_names:
+        raise Exception("Unable to parse manual invocation payload. Expected non-empty objectNames array")
+
+    normalized = []
+    for object_name in object_names:
+        if not isinstance(object_name, str) or not object_name.strip():
+            raise Exception("Unable to parse manual invocation payload. objectNames must contain non-empty strings")
+        normalized.append(object_name.strip())
+
+    if len(normalized) > MAX_BATCH_OBJECTS:
+        raise Exception(f"Unable to parse manual invocation payload. objectNames may contain at most {MAX_BATCH_OBJECTS} items")
+
+    return normalized
+
+
+def parse_invocation_payload(payload: object) -> Tuple[str, object, Optional[str], bool]:
     """Parse invocation payload.
 
     Supports:
     - Manual invocation: {"sourceBucket": "...", "objectName": "...", "destinationBucket": "..."?}
+    - Batch manual invocation: {"sourceBucket": "...", "objectNames": ["..."], "destinationBucket": "..."?}
     - Legacy OCI Events payload: parses via _parse_object_create_event
 
-    Returns (sourceBucket, objectName, destinationBucketOverride).
+    Returns (sourceBucket, objectName_or_objectNames, destinationBucketOverride, isBatch).
     """
     if isinstance(payload, dict):
         # Manual path: if any manual keys present, require sourceBucket + objectName
-        if "sourceBucket" in payload or "objectName" in payload or "destinationBucket" in payload:
+        if "sourceBucket" in payload or "objectName" in payload or "objectNames" in payload or "destinationBucket" in payload:
             src_bucket = payload.get("sourceBucket")
             object_name = payload.get("objectName")
+            object_names = payload.get("objectNames")
             dst_bucket = payload.get("destinationBucket")
-            if not src_bucket or not object_name:
+            if not src_bucket:
                 raise Exception(
-                    "Unable to parse manual invocation payload. Expected sourceBucket and objectName"
+                    "Unable to parse manual invocation payload. Expected sourceBucket and objectName/objectNames"
                 )
-            return src_bucket, object_name, dst_bucket
+            if object_name and object_names:
+                raise Exception(
+                    "Unable to parse manual invocation payload. Provide either objectName or objectNames, not both"
+                )
+            if object_names is not None:
+                return src_bucket, _normalize_batch_object_names(object_names), dst_bucket, True
+            if not object_name:
+                raise Exception(
+                    "Unable to parse manual invocation payload. Expected sourceBucket and objectName/objectNames"
+                )
+            return src_bucket, object_name, dst_bucket, False
 
         # Legacy OCI Events payload
         src_bucket, object_name = _parse_object_create_event(payload)
-        return src_bucket, object_name, None
+        return src_bucket, object_name, None, False
 
     raise Exception("Unable to parse payload: expected JSON object")
 
@@ -146,6 +184,77 @@ def _resize_jpeg(src_path: str, dst_path: str, max_dim: int = 1200, quality: int
         img.save(filename=dst_path)
 
 
+def publish_renditions(client, namespace: str, dst_bucket: str, object_name: str, original_bytes: bytes):
+    with tempfile.TemporaryDirectory() as td:
+        original_path = os.path.join(td, "original")
+        with open(original_path, "wb") as f:
+            f.write(original_bytes)
+
+        published = []
+        for variant, max_dim, quality in RENDITION_SPECS:
+            output_path = os.path.join(td, f"resized-{variant}.jpg")
+            logger.info('Processing variant %s for %s' % (variant, object_name))
+            _resize_jpeg(original_path, output_path, max_dim=max_dim, quality=quality)
+            with open(output_path, "rb") as f:
+                _upload_object(
+                    client,
+                    namespace,
+                    dst_bucket,
+                    _variant_object_name(variant, object_name),
+                    f.read(),
+                )
+            published.append(_variant_object_name(variant, object_name))
+
+    return published
+
+
+def publish_original_and_renditions(client, namespace: str, src_bucket: str, dst_bucket: str, object_name: str):
+    logger.info('Processing original image %s from %s to %s' % (object_name, src_bucket, dst_bucket))
+    original_bytes = _download_object(client, namespace, src_bucket, object_name)
+    variant_objects = publish_renditions(client, namespace, dst_bucket, object_name, original_bytes)
+    _upload_object(client, namespace, dst_bucket, object_name, original_bytes)
+
+    return {
+        "copiedOriginalObject": object_name,
+        "variantObjects": variant_objects,
+    }
+
+
+def publish_batch(client, namespace: str, src_bucket: str, dst_bucket: str, object_names):
+    results = []
+    succeeded = 0
+    failed = 0
+
+    for object_name in object_names:
+        try:
+            published = publish_original_and_renditions(client, namespace, src_bucket, dst_bucket, object_name)
+            results.append({
+                "objectName": object_name,
+                "ok": True,
+                "copiedOriginalObject": published["copiedOriginalObject"],
+                "variantObjects": published["variantObjects"],
+            })
+            succeeded += 1
+        except Exception as err:
+            logger.exception("Failed processing batch object %s", object_name)
+            results.append({
+                "objectName": object_name,
+                "ok": False,
+                "error": str(err),
+            })
+            failed += 1
+
+    return {
+        "ok": True,
+        "sourceBucket": src_bucket,
+        "destBucket": dst_bucket,
+        "processed": len(object_names),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
+    }
+
+
 def handler(ctx, data: Optional[io.BytesIO] = None):
     try:
         raw = (data.getvalue().decode("utf-8") if data else "").strip() or "{}"
@@ -161,7 +270,7 @@ def handler(ctx, data: Optional[io.BytesIO] = None):
 
         _log_payload(payload, raw)
 
-        src_bucket, object_name, dst_bucket_override = parse_invocation_payload(payload)
+        src_bucket, object_name_or_names, dst_bucket_override, is_batch = parse_invocation_payload(payload)
         namespace = _env("OCI_OBJECT_STORAGE_NAMESPACE")
         dst_bucket = dst_bucket_override or _env("OCI_DST_BUCKET")
 
@@ -169,62 +278,28 @@ def handler(ctx, data: Optional[io.BytesIO] = None):
 
         logger.info('Making object storage client...')
         client = _object_storage_client()
-        logger.info('Downloading object...')
-        original_bytes = _download_object(client, namespace, src_bucket, object_name)
+        logger.info('Publishing fixed renditions...')
 
-        logger.info('Writing tmp directory...')
-        with tempfile.TemporaryDirectory() as td:
-            original_path = os.path.join(td, "original")
-            resized_1200_path = os.path.join(td, "resized-1200.jpg")
-            resized_600_path = os.path.join(td, "resized-600.jpg")
-
-            with open(original_path, "wb") as f:
-                f.write(original_bytes)
-
-            logger.info('Resizing jpg (1200)...')
-            _resize_jpeg(original_path, resized_1200_path, max_dim=1200, quality=82)
-
-            logger.info('Resizing jpg (600)...')
-            _resize_jpeg(original_path, resized_600_path, max_dim=600, quality=82)
-
-            with open(resized_1200_path, "rb") as f:
-                resized_1200_bytes = f.read()
-
-            with open(resized_600_path, "rb") as f:
-                resized_600_bytes = f.read()
-
-        obj_1200 = _variant_object_name("1200", object_name)
-        obj_600 = _variant_object_name("600", object_name)
-
-        logger.info('Uploading 1200 variant to dest bucket...')
-        _upload_object(client, namespace, dst_bucket, obj_1200, resized_1200_bytes)
-
-        logger.info('Uploading 600 variant to dest bucket...')
-        _upload_object(client, namespace, dst_bucket, obj_600, resized_600_bytes)
+        if is_batch:
+            logger.info('Running in batch mode with %d objects' % (len(object_name_or_names)))
+            response_body = publish_batch(client, namespace, src_bucket, dst_bucket, object_name_or_names)
+        else:
+            object_name = object_name_or_names
+            published = publish_original_and_renditions(client, namespace, src_bucket, dst_bucket, object_name)
+            response_body = {
+                "ok": True,
+                "sourceBucket": src_bucket,
+                "destBucket": dst_bucket,
+                "objectName": object_name,
+                "copiedOriginalObject": published["copiedOriginalObject"],
+                "variantObjects": published["variantObjects"],
+            }
 
         logger.info('Returning response...')
-        logger.info(json.dumps(
-                {
-                    "ok": True,
-                    "sourceBucket": src_bucket,
-                    "destBucket": dst_bucket,
-                    "objectName": object_name,
-                    "destObject1200": obj_1200,
-                    "destObject600": obj_600,
-                }
-            ))
+        logger.info(json.dumps(response_body))
         return response.Response(
             ctx,
-            response_data=json.dumps(
-                {
-                    "ok": True,
-                    "sourceBucket": src_bucket,
-                    "destBucket": dst_bucket,
-                    "objectName": object_name,
-                    "destObject1200": obj_1200,
-                    "destObject600": obj_600,
-                }
-            ),
+            response_data=json.dumps(response_body),
             headers={"Content-Type": "application/json"},
         )
     except Exception as e:

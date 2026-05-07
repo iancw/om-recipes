@@ -16,6 +16,7 @@ import {
     updateRecipeAction
 } from './actions';
 import { getSavedRecipeIdsForUser } from '../../../lib/recipe-saves.js';
+import { hydrateRecipeImageRecord } from '../../../lib/recipe-image-assets.js';
 import { getRecipePath, isUuidLike } from '../../../lib/recipe-url.js';
 import { getEquivalentWhiteBalance } from '../../../lib/whiteBalanceEquivalence.js';
 
@@ -87,6 +88,7 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
                 label: recipeComparisonImages.label,
                 image: {
                     id: images.id,
+                    preparedObjectKey: images.preparedObjectKey,
                     smallUrl: images.smallUrl,
                     fullSizeUrl: images.fullSizeUrl,
                     dimensions: images.dimensions,
@@ -102,6 +104,7 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
             .select({
                 image: {
                     id: images.id,
+                    preparedObjectKey: images.preparedObjectKey,
                     smallUrl: images.smallUrl,
                     fullSizeUrl: images.fullSizeUrl,
                     dimensions: images.dimensions,
@@ -128,12 +131,16 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
     ]);
 
     const comparisonImages = (comparisonRows ?? [])
-        .map((r) => (r.image?.id ? { ...r.image, label: r.label } : null))
+        .map((r) => (r.image?.id ? { ...hydrateRecipeImageRecord(r.image), label: r.label } : null))
         .filter(Boolean);
     const sampleImages = (sampleRows ?? [])
         .map((r) => {
             if (!r?.image?.id) return null;
-            return { ...r.image, isPrimary: r.isPrimary, sampleAuthor: r.author ?? null };
+            return {
+                ...hydrateRecipeImageRecord(r.image),
+                isPrimary: r.isPrimary,
+                sampleAuthor: r.author ?? null
+            };
         })
         .filter(Boolean);
     const savedRecipeIds = await getSavedRecipeIdsForUser({ userId, recipeIds: [recipeId] });
@@ -158,9 +165,7 @@ export async function generateMetadata({ params }) {
         || `Color recipe for OM System / Olympus cameras by ${recipe.authorName}.`;
 
     const primaryImage = recipe.sampleImages?.find((img) => img.isPrimary) ?? recipe.sampleImages?.[0] ?? null;
-    const ogImageUrl = primaryImage?.smallUrl
-        ? `${process.env.APP_BASE_URL ?? ''}${primaryImage.smallUrl}`
-        : null;
+    const ogImageUrl = primaryImage?.assetUrls?.original ?? null;
 
     return {
         title,

@@ -2,6 +2,7 @@
 .claude
 .codex
 .beads
+.superpowers
 
 # dependencies
 /node_modules

@@ -1,5 +1,5 @@
 schema_version: 20180708
-name: image-resize-fn
-version: 0.0.19
+name: process-images
+version: 1.0.5
 runtime: docker
 memory: 512

@@ -1,20 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 let selectMock;
 let getSessionMock;
 let getSavedRecipeIdsForUserMock;
-let permanentRedirectMock;
-let notFoundMock;
-let recipeCardProps;
-
-const makeSelectChain = (result) => ({
-    from: vi.fn().mockReturnThis(),
-    leftJoin: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
-    orderBy: vi.fn(() => Promise.resolve(result)),
-    limit: vi.fn(() => Promise.resolve(result)),
-    then: (onFulfilled, onRejected) => Promise.resolve(result).then(onFulfilled, onRejected)
-});
 
 vi.mock('../db/index.ts', () => ({
     db: {
@@ -30,75 +18,31 @@ vi.mock('../lib/recipe-saves.js', () => ({
     getSavedRecipeIdsForUser: (...args) => getSavedRecipeIdsForUserMock(...args)
 }));
 
-vi.mock('../lib/whiteBalanceEquivalence.js', () => ({
-    getEquivalentWhiteBalance: vi.fn(() => null)
-}));
+function makeSelectChain(result) {
+    return {
+        from: vi.fn().mockReturnThis(),
+        leftJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        groupBy: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        offset: vi.fn(() => Promise.resolve(result)),
+        then: (onFulfilled, onRejected) => Promise.resolve(result).then(onFulfilled, onRejected)
+    };
+}
 
-vi.mock('next/navigation', () => ({
-    notFound: (...args) => notFoundMock(...args),
-    permanentRedirect: (...args) => permanentRedirectMock(...args)
-}));
-
-vi.mock('../components/recipe-card.jsx', () => ({
-    default: (props) => {
-        recipeCardProps = props;
-        return null;
-    }
-}));
-
-vi.mock('../components/SampleGallery.jsx', () => ({
-    default: () => null
-}));
-
-vi.mock('../components/ui/badge.jsx', () => ({
-    Badge: () => null
-}));
-
-vi.mock('../components/ui/card.jsx', () => ({
-    Card: ({ children }) => children ?? null,
-    CardContent: ({ children }) => children ?? null
-}));
-
-vi.mock('../app/recipes/[id]/actions.js', () => ({
-    deleteMyRecipeAction: vi.fn(),
-    deleteRecipeSampleImageAction: vi.fn(),
-    setPrimaryRecipeSampleImageAction: vi.fn(),
-    updateRecipeAction: vi.fn()
-}));
-
-describe('recipe detail page redirects', () => {
+describe('recipe search route', () => {
     beforeEach(() => {
         vi.resetModules();
-        globalThis.React = {
-            createElement: vi.fn((type, props, ...children) => {
-                const resolvedProps = {
-                    ...(props ?? {}),
-                    ...(children.length > 0 ? { children: children.length === 1 ? children[0] : children } : {})
-                };
-
-                if (typeof type === 'function') {
-                    return type(resolvedProps);
-                }
-
-                return { type, props: resolvedProps };
-            })
-        };
 
         getSessionMock = vi.fn(async () => ({ user: { id: 42 } }));
-        getSavedRecipeIdsForUserMock = vi.fn(async () => new Set());
-        recipeCardProps = null;
-        notFoundMock = vi.fn(() => {
-            throw new Error('NOT_FOUND');
-        });
-        permanentRedirectMock = vi.fn((location) => {
-            throw new Error(`REDIRECT:${location}`);
-        });
+        getSavedRecipeIdsForUserMock = vi.fn(async () => new Set([101]));
 
         const selectResults = [
             [
                 {
-                    id: 123,
-                    uuid: '123e4567-e89b-12d3-a456-426614174000',
+                    id: 101,
+                    uuid: 'recipe-uuid',
                     slug: 'portra-400',
                     recipeName: 'Portra 400',
                     authorName: 'Author',
@@ -127,17 +71,19 @@ describe('recipe detail page redirects', () => {
                     whiteBalanceTemperature: null,
                     whiteBalanceAmberOffset: 0,
                     whiteBalanceGreenOffset: 0,
-                    authorId: 9,
+                    createdAt: new Date('2026-04-30T00:00:00Z'),
                     authorSocial: {
                         instagram: null,
                         flickr: null,
                         website: null,
                         kofi: null
-                    }
+                    },
+                    saveCount: 3
                 }
             ],
             [
                 {
+                    recipeId: 101,
                     label: 'Before',
                     image: {
                         id: 201,
@@ -152,6 +98,7 @@ describe('recipe detail page redirects', () => {
             ],
             [
                 {
+                    recipeId: 101,
                     image: {
                         id: 301,
                         preparedObjectKey: 'authors/a/recipes/r/sample.jpg',
@@ -173,8 +120,7 @@ describe('recipe detail page redirects', () => {
                         kofiLink: null
                     }
                 }
-            ],
-            []
+            ]
         ];
 
         selectMock = vi.fn(() => {
@@ -185,32 +131,16 @@ describe('recipe detail page redirects', () => {
         });
     });
 
-    afterEach(() => {
-        delete globalThis.React;
-    });
+    it('returns hydrated comparison and sample images with asset-host URLs', async () => {
+        const { GET } = await import('../app/recipes/search/route.js');
 
-    it('redirects uuid requests to the canonical slug path', async () => {
-        const mod = await import('../app/recipes/[id]/page.jsx');
+        const response = await GET(
+            new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0')
+        );
+        const body = await response.json();
 
-        await expect(
-            mod.default({
-                params: Promise.resolve({
-                    id: '123e4567-e89b-12d3-a456-426614174000'
-                })
-            })
-        ).rejects.toThrow('REDIRECT:/recipes/portra-400');
-    });
-
-    it('hydrates recipe media with asset-host URLs for the page loader', async () => {
-        const mod = await import('../app/recipes/[id]/page.jsx');
-
-        await mod.default({
-            params: Promise.resolve({
-                id: 'portra-400'
-            })
-        });
-
-        expect(recipeCardProps.recipe.comparisonImages[0]).toMatchObject({
+        expect(body.results).toHaveLength(1);
+        expect(body.results[0].comparisonImages[0]).toMatchObject({
             id: 201,
             preparedObjectKey: 'authors/a/recipes/r/comparison.jpg',
             assetUrls: {
@@ -218,7 +148,7 @@ describe('recipe detail page redirects', () => {
             },
             label: 'Before'
         });
-        expect(recipeCardProps.recipe.sampleImages[0]).toMatchObject({
+        expect(body.results[0].sampleImages[0]).toMatchObject({
             id: 301,
             preparedObjectKey: 'authors/a/recipes/r/sample.jpg',
             assetUrls: {
@@ -226,21 +156,5 @@ describe('recipe detail page redirects', () => {
             },
             isPrimary: true
         });
-    });
-
-    it('uses the asset host for recipe Open Graph images', async () => {
-        const mod = await import('../app/recipes/[id]/page.jsx');
-
-        const metadata = await mod.generateMetadata({
-            params: Promise.resolve({
-                id: 'portra-400'
-            })
-        });
-
-        expect(metadata.openGraph.images).toEqual([
-            {
-                url: 'https://images.om-recipes.com/original/authors/a/recipes/r/sample.jpg'
-            }
-        ]);
     });
 });

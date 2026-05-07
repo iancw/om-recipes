@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
     comparisonImageSelectionValue,
     getAvailableComparisonImageLabels,
+    getImagePreviewUrl,
+    getRecipeCardPreviewUrl,
     getRecipeDownloadImage,
+    getRecipeDownloadUrl,
+    getRecipeModalImageUrl,
     getPrimarySampleImage,
     getRecipePreviewImage,
     SAMPLE_IMAGE_SELECTION
@@ -91,5 +95,80 @@ describe('recipe image selection helpers', () => {
         };
 
         expect(getRecipeDownloadImage(recipe)).toBeNull();
+    });
+
+    it('prefers fixed asset renditions for preview and modal contexts', () => {
+        const recipe = {
+            sampleImages: [
+                {
+                    id: 'sample-1',
+                    validExif: true,
+                    assetUrls: {
+                        320: 'https://images.om-recipes.com/320/a.jpg',
+                        640: 'https://images.om-recipes.com/640/a.jpg',
+                        1200: 'https://images.om-recipes.com/1200/a.jpg',
+                        1600: 'https://images.om-recipes.com/1600/a.jpg',
+                        original: 'https://images.om-recipes.com/original/a.jpg'
+                    },
+                    smallUrl: '/assets/images/320/a.jpg',
+                    fullSizeUrl: '/assets/images/original/a.jpg'
+                }
+            ]
+        };
+
+        expect(getRecipeCardPreviewUrl(recipe)).toBe('https://images.om-recipes.com/640/a.jpg');
+        expect(getRecipeModalImageUrl(recipe.sampleImages[0])).toBe('https://images.om-recipes.com/1200/a.jpg');
+        expect(getRecipeDownloadUrl(recipe)).toBe('/assets/images/original/a.jpg');
+    });
+
+    it('uses the 320 asset rendition when larger preview renditions are unavailable', () => {
+        const recipe = {
+            sampleImages: [
+                {
+                    id: 'sample-1',
+                    assetUrls: {
+                        320: 'https://images.om-recipes.com/320/a.jpg',
+                        original: 'https://images.om-recipes.com/original/a.jpg'
+                    }
+                }
+            ]
+        };
+
+        expect(getRecipeCardPreviewUrl(recipe)).toBe('https://images.om-recipes.com/320/a.jpg');
+        expect(getImagePreviewUrl(recipe.sampleImages[0])).toBe('https://images.om-recipes.com/320/a.jpg');
+    });
+
+    it('falls back to legacy URLs when explicit asset renditions are missing', () => {
+        const recipe = {
+            sampleImages: [
+                {
+                    id: 'sample-1',
+                    validExif: true,
+                    smallUrl: '/assets/images/320/a.jpg',
+                    fullSizeUrl: '/assets/images/original/a.jpg'
+                }
+            ]
+        };
+
+        expect(getRecipeCardPreviewUrl(recipe)).toBe('/assets/images/320/a.jpg');
+        expect(getImagePreviewUrl(recipe.sampleImages[0])).toBe('/assets/images/320/a.jpg');
+        expect(getRecipeModalImageUrl(recipe.sampleImages[0])).toBe('/assets/images/1200/a.jpg');
+        expect(getRecipeDownloadUrl(recipe)).toBe('/assets/images/original/a.jpg');
+    });
+
+    it('uses the asset-host original for downloads when no legacy download URL remains', () => {
+        const recipe = {
+            sampleImages: [
+                {
+                    id: 'sample-1',
+                    validExif: true,
+                    assetUrls: {
+                        original: 'https://images.om-recipes.com/original/a.jpg'
+                    }
+                }
+            ]
+        };
+
+        expect(getRecipeDownloadUrl(recipe)).toBe('https://images.om-recipes.com/original/a.jpg');
     });
 });

@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useMemo, useState, useTransition } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import DeleteConfirmationModal from './DeleteConfirmationModal.jsx';
+import RecipePreviewImage from './RecipePreviewImage.jsx';
 import { getRecipePath } from '../lib/recipe-url.js';
+import { getImagePreviewUrl } from '../lib/recipe-image-selection.js';
 import { Badge } from './ui/badge.jsx';
 import { Button } from './ui/button.jsx';
 import { Card, CardContent } from './ui/card.jsx';
@@ -18,7 +19,7 @@ export default function MySamplesGrid({ samples, deleteSampleAction }) {
 
   const normalizedSamples = useMemo(
     () =>
-      (samples ?? []).filter((sample) => sample?.image?.id && (sample.image.smallUrl || sample.image.fullSizeUrl)),
+      (samples ?? []).filter((sample) => sample?.image?.id && getImagePreviewUrl(sample.image)),
     [samples]
   );
 
@@ -54,7 +55,7 @@ export default function MySamplesGrid({ samples, deleteSampleAction }) {
     <>
       <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 w-full">
         {normalizedSamples.map((sample) => {
-          const previewUrl = sample.image.smallUrl ?? sample.image.fullSizeUrl;
+          const previewUrl = getImagePreviewUrl(sample.image);
           const recipeHref = getRecipePath({ slug: sample.recipeSlug, uuid: sample.recipeUuid });
           return (
             <li key={`${sample.recipeId}:${sample.image.id}`} className="relative">
@@ -73,12 +74,13 @@ export default function MySamplesGrid({ samples, deleteSampleAction }) {
                   </Button>
                   <Link href={recipeHref} className="block no-underline">
                     <div className="relative mb-4 w-full overflow-hidden rounded-xl border border-border/60" style={{ aspectRatio: '4 / 3' }}>
-                      <Image
+                      <RecipePreviewImage
                         src={previewUrl}
                         alt={sample.recipeName ? `${sample.recipeName} sample` : 'Sample image'}
                         fill
                         sizes="(min-width: 1536px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                        className="object-cover"
+                        imageClassName="object-cover"
+                        placeholderClassName="absolute inset-0 bg-muted/40"
                       />
                     </div>
                     <div className="space-y-2 text-sm">

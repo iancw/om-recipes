@@ -132,11 +132,9 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
         consoleWarnMock?.mockRestore?.();
     });
 
-    it('sets smallUrl after finalize uses the prepared binding', async () => {
-        headObjectMock
-            .mockResolvedValueOnce({ contentLength: 100 })
-            .mockResolvedValueOnce({ contentLength: 10 });
-        invokeMock.mockResolvedValue({ ok: true });
+    it('finalizes the upload and queues rendition publishing without writing smallUrl', async () => {
+        headObjectMock.mockResolvedValueOnce({ contentLength: 100 });
+        invokeMock.mockRejectedValueOnce(new Error('function unavailable'));
 
         const result = await finalizeRecipeUploadAction({
             parameters: {
@@ -153,18 +151,47 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
                 authorId: 30
             })
         );
-        expect(updateSetCalls).toHaveLength(2);
-        expect(updateSetCalls[0]).toEqual(
+        expect(updateSetCalls).toEqual([
             expect.objectContaining({
                 fullSizeUrl: '/assets/images/original/authors/foo/recipes/img.jpg',
                 originalFileSize: 100,
                 finalizedAt: expect.any(Date)
             })
-        );
-        expect(updateSetCalls[1]).toEqual({ smallUrl: '/assets/images/600/authors/foo/recipes/img.jpg' });
+        ]);
+        expect(updateSetCalls.find((values) => 'smallUrl' in values)).toBeUndefined();
         expect(result.resizeAttempted).toBe(true);
-        expect(result.resizeSucceeded).toBe(true);
+        expect(result.resizeSucceeded).toBe(false);
         expect(result.resizeSkipped).toBe(false);
+    });
+
+    it('does not verify a processed object after a successful publish queue', async () => {
+        headObjectMock.mockResolvedValueOnce({ contentLength: 100 });
+        invokeMock.mockResolvedValueOnce({ ok: true });
+
+        const result = await finalizeRecipeUploadAction({
+            parameters: {
+                imageId: 2,
+                originalFileSize: 100
+            }
+        });
+
+        expect(result).toEqual({
+            ok: true,
+            fullSizeUrl: 'https://images.om-recipes.com/original/authors/foo/recipes/img.jpg',
+            resizeAttempted: true,
+            resizeSucceeded: false,
+            resizeSkipped: false
+        });
+        await vi.waitFor(() => {
+            expect(invokeMock).toHaveBeenCalledTimes(1);
+        });
+        expect(headObjectMock).toHaveBeenCalledTimes(1);
+        expect(updateSetCalls).toHaveLength(1);
+        expect(updateSetCalls[0]).toEqual(
+            expect.objectContaining({
+                fullSizeUrl: '/assets/images/original/authors/foo/recipes/img.jpg'
+            })
+        );
     });
 
     it('rejects finalize when uploads are disabled', async () => {
@@ -349,7 +376,9 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
         expect(result.resizeSkipped).toBe(false);
         expect(transactionMock).not.toHaveBeenCalled();
         expect(updateSetCalls).toHaveLength(1);
-        expect(consoleWarnMock).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => {
+            expect(consoleWarnMock).toHaveBeenCalledTimes(1);
+        });
         expect(consoleWarnMock.mock.calls[0][1]).toEqual(
             expect.objectContaining({
                 imageId: 2,
@@ -376,7 +405,9 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
         expect(result.resizeSucceeded).toBe(false);
         expect(result.resizeSkipped).toBe(false);
         expect(updateSetCalls).toHaveLength(1);
-        expect(consoleWarnMock).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => {
+            expect(consoleWarnMock).toHaveBeenCalledTimes(1);
+        });
     });
 
     it('returns the existing finalized result without rebinding on retry', async () => {
@@ -396,7 +427,7 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
 
         expect(result).toEqual({
             ok: true,
-            fullSizeUrl: '/assets/images/original/authors/foo/recipes/img.jpg',
+            fullSizeUrl: 'https://images.om-recipes.com/original/authors/foo/recipes/img.jpg',
             resizeAttempted: false,
             resizeSucceeded: true,
             resizeSkipped: true
@@ -411,6 +442,33 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
                 authorId: 30
             })
         );
+        expect(updateSetCalls).toHaveLength(0);
+    });
+
+    it('requeues rendition publishing on retry when finalize completed without processed markers', async () => {
+        selectedImageRow.finalizedAt = new Date('2026-04-08T12:00:00Z');
+        selectedImageRow.fullSizeUrl = '/assets/images/original/authors/foo/recipes/img.jpg';
+        selectedImageRow.smallUrl = null;
+        invokeMock.mockResolvedValueOnce({ ok: true });
+
+        const result = await finalizeRecipeUploadAction({
+            parameters: {
+                imageId: 2,
+                originalFileSize: 100
+            }
+        });
+
+        expect(result).toEqual({
+            ok: true,
+            fullSizeUrl: 'https://images.om-recipes.com/original/authors/foo/recipes/img.jpg',
+            resizeAttempted: true,
+            resizeSucceeded: false,
+            resizeSkipped: false
+        });
+        await vi.waitFor(() => {
+            expect(invokeMock).toHaveBeenCalledTimes(1);
+        });
+        expect(headObjectMock).not.toHaveBeenCalled();
         expect(updateSetCalls).toHaveLength(0);
     });
 });

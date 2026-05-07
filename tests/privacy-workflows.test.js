@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Readable } from 'node:stream';
 
 let selectMock;
 let insertMock;
@@ -7,6 +8,11 @@ let deleteMock;
 let deleteImagesByIdsMock;
 let putPrivacyArtifactMock;
 let deletePrivacyArtifactMock;
+let deleteObjectMock;
+let getMissingObjectStorageEnvVarsMock;
+let getObjectStorageClientFromEnvMock;
+let getObjectStorageNamespaceFromEnvMock;
+let getObjectMock;
 
 let selectHandlers = [];
 let insertHandlers = [];
@@ -44,6 +50,14 @@ vi.mock('../lib/privacy-artifacts.js', () => ({
     putPrivacyArtifact: (...args) => putPrivacyArtifactMock(...args),
     getPrivacyArtifact: vi.fn(),
     deletePrivacyArtifact: (...args) => deletePrivacyArtifactMock(...args)
+}));
+
+vi.mock('../lib/oci/objectStorage.js', () => ({
+    deleteObject: (...args) => deleteObjectMock(...args),
+    getMissingObjectStorageEnvVars: (...args) => getMissingObjectStorageEnvVarsMock(...args),
+    getObject: (...args) => getObjectMock(...args),
+    getObjectStorageClientFromEnv: (...args) => getObjectStorageClientFromEnvMock(...args),
+    getObjectStorageNamespaceFromEnv: (...args) => getObjectStorageNamespaceFromEnvMock(...args)
 }));
 
 describe('privacy workflows', () => {
@@ -86,6 +100,13 @@ describe('privacy workflows', () => {
         deleteImagesByIdsMock = vi.fn(async () => [700, 701]);
         putPrivacyArtifactMock = vi.fn(async () => {});
         deletePrivacyArtifactMock = vi.fn(async () => {});
+        deleteObjectMock = vi.fn(async () => {});
+        getMissingObjectStorageEnvVarsMock = vi.fn(() => []);
+        getObjectStorageClientFromEnvMock = vi.fn(() => ({ kind: 'client' }));
+        getObjectStorageNamespaceFromEnvMock = vi.fn(() => 'namespace');
+        getObjectMock = vi.fn(async () => ({
+            value: Readable.from([Buffer.from('image-bytes')])
+        }));
     });
 
     it('creates and completes a privacy export request', async () => {
@@ -147,6 +168,160 @@ describe('privacy workflows', () => {
         expect(requestId).toBe(1);
         expect(putPrivacyArtifactMock).toHaveBeenCalledTimes(1);
         expect(updateMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses preparedObjectKey as the source of truth for exported uploads', async () => {
+        process.env.OCI_IMAGES_ORIGINAL_BUCKET = 'original-bucket';
+
+        const { startPrivacyExport } = await import('../lib/privacy.js');
+
+        selectHandlers.push(
+            () => makeSelectChain([]),
+            () => makeSelectChain([
+                {
+                    id: 5,
+                    uuid: 'user-uuid',
+                    email: 'ian@example.com',
+                    emailVerifiedAt: null,
+                    createdAt: new Date('2026-04-01T00:00:00Z'),
+                    updatedAt: new Date('2026-04-01T00:00:00Z')
+                }
+            ]),
+            () => makeSelectChain([{ id: 88 }]),
+            () => makeSelectChain([]),
+            () =>
+                makeSelectChain([
+                    {
+                        id: 700,
+                        uuid: 'image-uuid',
+                        authorId: 88,
+                        preparedObjectKey: 'authors/a/prepared.jpg',
+                        fullSizeUrl: '/assets/images/original/authors/a/legacy.jpg',
+                        createdAt: new Date('2026-04-15T00:00:00Z')
+                    }
+                ]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([])
+        );
+
+        insertHandlers.push(() => ({
+            values: vi.fn(() => ({
+                returning: vi.fn(() =>
+                    Promise.resolve([
+                        {
+                            id: 3,
+                            userId: 5,
+                            subjectUserUuid: 'user-uuid',
+                            requestType: 'export'
+                        }
+                    ])
+                )
+            }))
+        }));
+
+        updateHandlers.push(
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            }),
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            })
+        );
+
+        await startPrivacyExport({
+            userId: 5,
+            userUuid: 'user-uuid'
+        });
+
+        expect(getObjectMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                bucketName: 'original-bucket',
+                objectName: 'authors/a/prepared.jpg'
+            })
+        );
+        expect(getObjectMock).not.toHaveBeenCalledWith(
+            expect.objectContaining({
+                objectName: 'authors/a/legacy.jpg'
+            })
+        );
+    });
+
+    it('does not fall back to legacy fullSizeUrl when preparedObjectKey is missing', async () => {
+        process.env.OCI_IMAGES_ORIGINAL_BUCKET = 'original-bucket';
+
+        const { startPrivacyExport } = await import('../lib/privacy.js');
+
+        selectHandlers.push(
+            () => makeSelectChain([]),
+            () => makeSelectChain([
+                {
+                    id: 5,
+                    uuid: 'user-uuid',
+                    email: 'ian@example.com',
+                    emailVerifiedAt: null,
+                    createdAt: new Date('2026-04-01T00:00:00Z'),
+                    updatedAt: new Date('2026-04-01T00:00:00Z')
+                }
+            ]),
+            () => makeSelectChain([{ id: 88 }]),
+            () => makeSelectChain([]),
+            () =>
+                makeSelectChain([
+                    {
+                        id: 701,
+                        uuid: 'image-uuid-2',
+                        authorId: 88,
+                        preparedObjectKey: null,
+                        fullSizeUrl: '/assets/images/original/authors/a/legacy-only.jpg',
+                        createdAt: new Date('2026-04-15T00:00:00Z')
+                    }
+                ]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([])
+        );
+
+        insertHandlers.push(() => ({
+            values: vi.fn(() => ({
+                returning: vi.fn(() =>
+                    Promise.resolve([
+                        {
+                            id: 4,
+                            userId: 5,
+                            subjectUserUuid: 'user-uuid',
+                            requestType: 'export'
+                        }
+                    ])
+                )
+            }))
+        }));
+
+        updateHandlers.push(
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            }),
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            })
+        );
+
+        await startPrivacyExport({
+            userId: 5,
+            userUuid: 'user-uuid'
+        });
+
+        expect(getObjectMock).not.toHaveBeenCalled();
     });
 
     it('deletes owned images and account rows during account erasure', async () => {

@@ -339,6 +339,8 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(capturedImageValues.validExif).toBe(true);
         expect(capturedImageValues.preparedRecipeId).toBe(777);
         expect(capturedImageValues.preparedObjectKey).toBe(result.objectKey);
+        expect(capturedImageValues.smallUrl).toBeNull();
+        expect(capturedImageValues.fullSizeUrl).toBeNull();
         expect(selectResults.length).toBe(0);
         expect(insertHandlers.length).toBe(0);
     });

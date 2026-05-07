@@ -97,7 +97,7 @@ describe('recipe image selection helpers', () => {
         expect(getRecipeDownloadImage(recipe)).toBeNull();
     });
 
-    it('prefers fixed asset renditions for preview and modal contexts', () => {
+    it('prefers fixed asset renditions for preview, modal, and download contexts', () => {
         const recipe = {
             sampleImages: [
                 {
@@ -118,7 +118,7 @@ describe('recipe image selection helpers', () => {
 
         expect(getRecipeCardPreviewUrl(recipe)).toBe('https://images.om-recipes.com/640/a.jpg');
         expect(getRecipeModalImageUrl(recipe.sampleImages[0])).toBe('https://images.om-recipes.com/1200/a.jpg');
-        expect(getRecipeDownloadUrl(recipe)).toBe('/assets/images/original/a.jpg');
+        expect(getRecipeDownloadUrl(recipe)).toBe('https://images.om-recipes.com/original/a.jpg');
     });
 
     it('uses the 320 asset rendition when larger preview renditions are unavailable', () => {

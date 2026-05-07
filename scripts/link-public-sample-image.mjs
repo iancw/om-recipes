@@ -1,8 +1,15 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { neon } from '@netlify/neon';
 import dotenv from 'dotenv';
+
+import {
+    buildManualImageObjectKey,
+    findOrCreateObjectBackedImage,
+    publishManualImageAsset
+} from './manual-image-storage.mjs';
 
 dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 
@@ -107,7 +114,8 @@ async function findRecipe(sql, recipeIdentifier) {
                 r.slug,
                 r.recipe_name,
                 r.author_id,
-                a.name AS author_name
+                a.name AS author_name,
+                a.uuid AS author_uuid
             FROM recipes r
             INNER JOIN authors a ON a.id = r.author_id
             WHERE r.id = ${recipeId}
@@ -127,7 +135,8 @@ async function findRecipe(sql, recipeIdentifier) {
                 r.slug,
                 r.recipe_name,
                 r.author_id,
-                a.name AS author_name
+                a.name AS author_name,
+                a.uuid AS author_uuid
             FROM recipes r
             INNER JOIN authors a ON a.id = r.author_id
             WHERE r.slug = ${recipeIdentifier}
@@ -149,71 +158,16 @@ async function findRecipe(sql, recipeIdentifier) {
     return rows[0];
 }
 
-async function findOrCreateImage(sql, { authorId, publicUrl, dryRun }) {
-    const existing = await sql`
-        SELECT id, uuid, author_id, full_size_url, small_url, valid_exif
-        FROM images
-        WHERE author_id = ${authorId}
-          AND (
-              full_size_url = ${publicUrl}
-              OR (full_size_url IS NULL AND small_url = ${publicUrl})
-          )
-        LIMIT 1
-    `;
-
-    if (existing.length > 0) {
-        return {
-            image: existing[0],
-            created: false
-        };
-    }
-
-    if (dryRun) {
-        return {
-            image: {
-                id: null,
-                uuid: null,
-                author_id: authorId,
-                full_size_url: null,
-                small_url: publicUrl,
-                valid_exif: false
-            },
-            created: true
-        };
-    }
-
-    const created = await sql`
-        INSERT INTO images (
-            author_id,
-            full_size_url,
-            small_url,
-            valid_exif
-        )
-        VALUES (
-            ${authorId},
-            null,
-            ${publicUrl},
-            false
-        )
-        RETURNING id, uuid, author_id, full_size_url, small_url, valid_exif
-    `;
-
-    return {
-        image: created[0],
-        created: true
-    };
-}
-
 async function ensureRecipeSampleLink(sql, { recipeId, imageId, authorId, dryRun }) {
-    const existing = await sql`
+    const existing = (await sql`
         SELECT recipe_id, image_id, author_id
         FROM recipe_sample_images
         WHERE recipe_id = ${recipeId}
           AND image_id = ${imageId}
         LIMIT 1
-    `;
+    `) ?? [];
 
-    if (existing.length > 0) {
+    if (Array.isArray(existing) && existing.length > 0) {
         if (existing[0].author_id !== authorId && !dryRun) {
             await sql`
                 UPDATE recipe_sample_images
@@ -239,6 +193,54 @@ async function ensureRecipeSampleLink(sql, { recipeId, imageId, authorId, dryRun
     return { created: true, updatedAuthor: false };
 }
 
+export async function linkPublicSampleImage({
+    recipe,
+    imagePath,
+    sql,
+    dryRun = false,
+    publishManualImageAsset: publish = publishManualImageAsset,
+    findOrCreateObjectBackedImage: findOrCreate = findOrCreateObjectBackedImage
+}) {
+    const objectKey = buildManualImageObjectKey({
+        authorUuid: recipe.author_uuid,
+        recipeSlug: recipe.slug,
+        fileName: imagePath.absolutePath,
+        comparisonLabel: null
+    });
+
+    if (!dryRun) {
+        await publish({
+            absolutePath: imagePath.absolutePath,
+            objectKey,
+            originalBucket: process.env.OCI_IMAGES_ORIGINAL_BUCKET,
+            processedBucket: process.env.OCI_IMAGES_PROCESSED_BUCKET
+        });
+    }
+
+    const { image, created } = await findOrCreate(sql, {
+        authorId: recipe.author_id,
+        objectKey,
+        dryRun
+    });
+
+    if (image.id != null) {
+        await ensureRecipeSampleLink(sql, {
+            recipeId: recipe.id,
+            imageId: image.id,
+            authorId: recipe.author_id,
+            dryRun
+        });
+    }
+
+    return {
+        imageCreated: created,
+        imageRow: {
+            id: image.id,
+            preparedObjectKey: objectKey
+        }
+    };
+}
+
 async function main() {
     const { recipe: recipeIdentifier, image: imageArg, dryRun } = parseArgs(process.argv.slice(2));
 
@@ -249,21 +251,12 @@ async function main() {
     const imagePath = await resolveImagePath(imageArg);
     const sql = neon(process.env.NETLIFY_DATABASE_URL);
     const recipe = await findRecipe(sql, recipeIdentifier);
-
-    const { image, created: imageCreated } = await findOrCreateImage(sql, {
-        authorId: recipe.author_id,
-        publicUrl: imagePath.publicUrl,
+    const result = await linkPublicSampleImage({
+        recipe,
+        imagePath,
+        sql,
         dryRun
     });
-
-    const linkResult = image.id == null
-        ? { created: true, updatedAuthor: false }
-        : await ensureRecipeSampleLink(sql, {
-            recipeId: recipe.id,
-            imageId: image.id,
-            authorId: recipe.author_id,
-            dryRun
-        });
 
     console.log(JSON.stringify({
         ok: true,
@@ -281,21 +274,15 @@ async function main() {
             relativePath: imagePath.relativePath,
             publicUrl: imagePath.publicUrl
         },
-        imageRow: {
-            id: image.id,
-            uuid: image.uuid,
-            authorId: image.author_id,
-            fullSizeUrl: image.full_size_url,
-            smallUrl: image.small_url,
-            validExif: image.valid_exif
-        },
-        imageCreated,
-        recipeSampleLinkCreated: linkResult.created,
-        recipeSampleLinkAuthorUpdated: linkResult.updatedAuthor
+        imageRow: result.imageRow,
+        imageCreated: result.imageCreated
     }, null, 2));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const modulePath = fileURLToPath(import.meta.url);
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
+
+if (invokedPath === modulePath) {
     main().catch((err) => {
         console.error(err.message || err);
         process.exitCode = 1;

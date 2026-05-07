@@ -1,5 +1,6 @@
 /**
- * Upload comparison images to the database.
+ * Upload comparison images to object storage and link the resulting
+ * object-backed image rows to a recipe.
  *
  * Usage:
  *   node scripts/upload-comparison-images.mjs --slug <recipe-slug> --dir <path/to/comparisons>
@@ -7,50 +8,96 @@
  * The --dir path should point to a comparisons/ folder whose files are named
  * <label>.jpg (or .jpeg / .png / .webp). The label is derived from the filename
  * (without extension) and stored in recipe_comparison_images.label.
- *
- * The public URL stored in the images table is computed relative to the
- * project's `public/` directory, so the dir must be inside `public/`.
- *
- * Author ID is hardcoded to 19 (the site owner who took all comparison images).
  */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { neon } from '@netlify/neon';
 import dotenv from 'dotenv';
 
+import {
+    buildManualImageObjectKey,
+    findOrCreateObjectBackedImage,
+    publishManualImageAsset
+} from './manual-image-storage.mjs';
+
 dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 
-const AUTHOR_ID = 19;
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 function parseArgs(argv) {
     const args = argv.slice(2);
-    const result = {};
+    const result = {
+        dryRun: false
+    };
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--slug' && args[i + 1]) result.slug = args[++i];
         else if (args[i] === '--dir' && args[i + 1]) result.dir = args[++i];
+        else if (args[i] === '--dry-run') result.dryRun = true;
     }
     return result;
-}
-
-function publicUrlFromAbsPath(absPath) {
-    const rel = path.relative(PUBLIC_DIR, absPath);
-    if (rel.startsWith('..')) {
-        throw new Error(`Path is outside public/: ${absPath}`);
-    }
-    return '/' + rel.split(path.sep).map(encodeURIComponent).join('/');
 }
 
 function labelFromFilename(filename) {
     return path.basename(filename, path.extname(filename));
 }
 
+export async function uploadComparisonImages({
+    recipe,
+    dirEntries,
+    sql,
+    dryRun = false,
+    publishManualImageAsset: publish = publishManualImageAsset,
+    findOrCreateObjectBackedImage: findOrCreate = findOrCreateObjectBackedImage
+}) {
+    const images = [];
+
+    for (const entry of dirEntries) {
+        const objectKey = buildManualImageObjectKey({
+            authorUuid: recipe.author_uuid,
+            recipeSlug: recipe.slug,
+            fileName: entry.absolutePath,
+            comparisonLabel: entry.label
+        });
+
+        if (!dryRun) {
+            await publish({
+                absolutePath: entry.absolutePath,
+                objectKey,
+                originalBucket: process.env.OCI_IMAGES_ORIGINAL_BUCKET,
+                processedBucket: process.env.OCI_IMAGES_PROCESSED_BUCKET
+            });
+        }
+
+        const { image } = await findOrCreate(sql, {
+            authorId: recipe.author_id,
+            objectKey,
+            dryRun
+        });
+
+        if (!dryRun && image.id != null) {
+            await sql`
+                INSERT INTO recipe_comparison_images (recipe_id, image_id, label)
+                VALUES (${recipe.id}, ${image.id}, ${entry.label})
+                ON CONFLICT DO NOTHING
+            `;
+        }
+
+        images.push({
+            label: entry.label,
+            objectKey,
+            imageId: image.id
+        });
+    }
+
+    return { images };
+}
+
 async function main() {
-    const { slug, dir } = parseArgs(process.argv);
+    const { slug, dir, dryRun } = parseArgs(process.argv);
 
     if (!slug || !dir) {
         console.error('Usage: node scripts/upload-comparison-images.mjs --slug <recipe-slug> --dir <path/to/comparisons>');
@@ -73,12 +120,17 @@ async function main() {
     }
 
     // Look up recipe by slug
-    const recipeRows = await sql`SELECT id FROM recipes WHERE slug = ${slug} LIMIT 1`;
-    if (recipeRows.length === 0) {
+    const recipe = await sql`
+        SELECT r.id, r.slug, r.author_id, a.uuid AS author_uuid
+        FROM recipes r
+        INNER JOIN authors a ON a.id = r.author_id
+        WHERE r.slug = ${slug}
+        LIMIT 1
+    `;
+    if (recipe.length === 0) {
         throw new Error(`No recipe found with slug: ${slug}`);
     }
-    const recipeId = recipeRows[0].id;
-    console.log(`Recipe: ${slug} (id=${recipeId})`);
+    console.log(`Recipe: ${slug} (id=${recipe[0].id})`);
 
     // Scan the comparisons directory for image files
     const entries = await fs.readdir(absDir, { withFileTypes: true });
@@ -94,55 +146,25 @@ async function main() {
 
     console.log(`Found ${imageFiles.length} image(s):`);
 
-    let imagesCreated = 0;
-    let linksCreated = 0;
-    let skipped = 0;
+    const { images } = await uploadComparisonImages({
+        recipe: recipe[0],
+        dirEntries: imageFiles.map((filePath) => ({
+            absolutePath: filePath,
+            label: labelFromFilename(filePath)
+        })),
+        sql,
+        dryRun
+    });
 
-    for (const filePath of imageFiles) {
-        const publicUrl = publicUrlFromAbsPath(filePath);
-        const label = labelFromFilename(filePath);
-
-        // Find or create image row
-        const existing = await sql`
-            SELECT id FROM images
-            WHERE author_id = ${AUTHOR_ID} AND small_url = ${publicUrl}
-            LIMIT 1
-        `;
-
-        let imageId;
-        if (existing.length > 0) {
-            imageId = existing[0].id;
-        } else {
-            const [created] = await sql`
-                INSERT INTO images (author_id, small_url)
-                VALUES (${AUTHOR_ID}, ${publicUrl})
-                RETURNING id
-            `;
-            imageId = created.id;
-            imagesCreated++;
-        }
-
-        // Link to recipe
-        const linkResult = await sql`
-            INSERT INTO recipe_comparison_images (recipe_id, image_id, label)
-            VALUES (${recipeId}, ${imageId}, ${label})
-            ON CONFLICT DO NOTHING
-            RETURNING recipe_id
-        `;
-
-        if (linkResult.length > 0) {
-            linksCreated++;
-            console.log(`  + ${label} (image_id=${imageId}, new_image=${existing.length === 0})`);
-        } else {
-            skipped++;
-            console.log(`  ~ ${label} (already linked, skipped)`);
-        }
-    }
-
-    console.log(`\nDone. images_created=${imagesCreated}, links_created=${linksCreated}, skipped=${skipped}`);
+    console.log(`\nDone. images_processed=${images.length}`);
 }
 
-main().catch((err) => {
-    console.error(err);
-    process.exitCode = 1;
-});
+const modulePath = fileURLToPath(import.meta.url);
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
+
+if (invokedPath === modulePath) {
+    main().catch((err) => {
+        console.error(err);
+        process.exitCode = 1;
+    });
+}

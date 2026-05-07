@@ -1,7 +1,7 @@
 /**
  * Scans public/images for folders with a comparisons/ subdirectory, looks up
  * each recipe's slug in the database by author_name + recipe_name, and prints
- * the upload commands to run.
+ * the object-storage-backed comparison upload commands to run.
  *
  * Usage:
  *   node scripts/list-comparison-upload-commands.mjs
@@ -9,6 +9,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { neon } from '@netlify/neon';
 import dotenv from 'dotenv';
@@ -80,7 +81,14 @@ async function main() {
     }
 }
 
-main().catch((err) => {
-    console.error(err);
-    process.exitCode = 1;
-});
+export { main as listComparisonUploadCommands };
+
+const modulePath = fileURLToPath(import.meta.url);
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
+
+if (invokedPath === modulePath) {
+    main().catch((err) => {
+        console.error(err);
+        process.exitCode = 1;
+    });
+}

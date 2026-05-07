@@ -1,10 +1,8 @@
-import { after } from 'next/server';
 import { uploadDisabled } from 'utils';
 import { Alert } from 'components/alert';
 import { Markdown } from 'components/markdown';
 import RecipeUpload from './RecipeUpload';
 import { getSession } from '../../lib/auth.js';
-import { warmImageResizeFunction } from '../../lib/oci/functionsInvoke.js';
 import LoginButton from 'components/LoginButton';
 import { Badge } from 'components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from 'components/ui/card';
@@ -27,10 +25,6 @@ Sorry! Uploads are disabled right now.
 export default async function Page() {
     const session = await getSession();
     const user = session?.user;
-
-    if (user) {
-        after(() => warmImageResizeFunction().catch(() => {}));
-    }
 
     return (
         <div className="flex w-full flex-col gap-8 pb-10 pt-2">

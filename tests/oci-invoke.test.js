@@ -127,16 +127,10 @@ describe('lib/oci/functionsInvoke', () => {
         expect(requestArg.functionId).toBe('ocid1.fnfunc.oc1..cccc');
     });
 
-    it('warmImageResizeFunction prefers OCI_PROCESS_IMAGE_FUNCTION_ID', async () => {
-        setValidEnv();
-        const { warmImageResizeFunction } = await import('../lib/oci/functionsInvoke.js');
-        const functionsMod = await import('oci-functions');
-        const spy = vi.spyOn(functionsMod.FunctionsInvokeClient.prototype, 'invokeFunction').mockResolvedValue({});
+    it('does not expose a warmImageResizeFunction helper', async () => {
+        const functionsInvoke = await import('../lib/oci/functionsInvoke.js');
 
-        await warmImageResizeFunction();
-
-        const [requestArg] = spy.mock.calls[0];
-        expect(requestArg.functionId).toBe('ocid1.fnfunc.oc1..dddd');
+        expect(functionsInvoke).not.toHaveProperty('warmImageResizeFunction');
     });
 
     it('success: returns parsed JSON on 2xx ok:true', async () => {

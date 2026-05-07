@@ -14,7 +14,7 @@ export function Header() {
                     .nav-mobile  { display: none; }
                 }
             `}</style>
-            <nav className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between py-5">
+            <nav className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 py-5">
                 <Link href="/" className="no-underline">
                     <div className="flex items-center gap-3">
                         <Badge variant="secondary" className="rounded-md px-2.5 py-1 tracking-[0.22em]">
@@ -28,7 +28,9 @@ export function Header() {
                         </div>
                     </div>
                 </Link>
-                <HeaderNav />
+                <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end">
+                    <HeaderNav />
+                </div>
             </nav>
         </header>
     );

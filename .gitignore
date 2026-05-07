@@ -3,6 +3,7 @@
 .codex
 .beads
 .superpowers
+.worktrees
 
 # dependencies
 /node_modules

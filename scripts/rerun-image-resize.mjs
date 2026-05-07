@@ -7,8 +7,8 @@
  *
  * The image must already be finalized (i.e. the original was successfully uploaded
  * to OCI object storage and the DB row has prepared_object_key set). This script
- * invokes the resize function, verifies the resized object appears in the processed
- * bucket, and sets small_url on the images row.
+ * invokes the resize function and verifies the expected fixed renditions appear
+ * in the processed bucket.
  */
 
 import path from 'node:path';
@@ -23,6 +23,7 @@ import {
     headObject
 } from '../lib/oci/objectStorage.js';
 import { invokeImageResizeFunction } from '../lib/oci/functionsInvoke.js';
+import { expectedVariantObjectNames } from './backfill-image-renditions.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -43,7 +44,7 @@ function fail(message) {
     throw new Error(message);
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
     const out = { imageId: null, dryRun: false };
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i];
@@ -70,7 +71,66 @@ function parseArgs(argv) {
     return out;
 }
 
-async function main() {
+export async function rerunImageResize({
+    image,
+    dryRun,
+    originalBucket,
+    resizedBucket,
+    namespaceName,
+    storageClient,
+    invoke = invokeImageResizeFunction,
+    head = headObject
+}) {
+    const objectKey = image.prepared_object_key;
+    const variantObjectNames = expectedVariantObjectNames(objectKey);
+
+    if (dryRun) {
+        console.log('\n[dry-run] Would invoke resize function with:');
+        console.log(`  sourceBucket:      ${originalBucket}`);
+        console.log(`  objectName:        ${objectKey}`);
+        console.log(`  destinationBucket: ${resizedBucket}`);
+        console.log('  expected variants:');
+        for (const objectName of variantObjectNames) {
+            console.log(`    - ${objectName}`);
+        }
+        return {
+            dryRun: true,
+            verifiedVariantCount: 0,
+            variantObjectNames
+        };
+    }
+
+    console.log(`\nInvoking resize function...`);
+    console.log(`  sourceBucket:      ${originalBucket}`);
+    console.log(`  objectName:        ${objectKey}`);
+    console.log(`  destinationBucket: ${resizedBucket}`);
+
+    await invoke({
+        sourceBucket: originalBucket,
+        objectName: objectKey,
+        destinationBucket: resizedBucket
+    });
+
+    console.log('Resize function invoked successfully. Verifying expected renditions...');
+
+    for (const objectName of variantObjectNames) {
+        await head({
+            client: storageClient,
+            namespaceName,
+            bucketName: resizedBucket,
+            objectName
+        });
+    }
+
+    console.log(`Verified ${variantObjectNames.length} renditions for image id=${image.id}.`);
+    return {
+        dryRun: false,
+        verifiedVariantCount: variantObjectNames.length,
+        variantObjectNames
+    };
+}
+
+export async function main() {
     dotenv.config({ path: path.join(REPO_ROOT, '.env.local') });
 
     const { imageId, dryRun } = parseArgs(process.argv.slice(2));
@@ -113,7 +173,7 @@ async function main() {
     console.log(`  uuid:                ${img.uuid}`);
     console.log(`  prepared_object_key: ${img.prepared_object_key}`);
     console.log(`  full_size_url:       ${img.full_size_url}`);
-    console.log(`  small_url:           ${img.small_url ?? '(null — not yet resized)'}`);
+    console.log(`  small_url:           ${img.small_url ?? '(null)'}`);
     console.log(`  finalized_at:        ${img.finalized_at ?? '(null — not yet finalized)'}`);
 
     if (!img.prepared_object_key) {
@@ -124,60 +184,22 @@ async function main() {
         fail('Image has not been finalized yet (finalized_at is null). The original upload may not have completed.');
     }
 
-    if (img.small_url) {
-        console.log('\nsmall_url is already set — image has been resized.');
-        console.log('Re-running anyway to verify and (if needed) overwrite small_url.');
-    }
+    const storageClient = dryRun ? null : getObjectStorageClientFromEnv();
+    const namespaceName = dryRun ? null : getObjectStorageNamespaceFromEnv();
 
-    const objectKey = img.prepared_object_key;
-    const resizedObjectKey = `600/${objectKey}`;
-    const resizedUrl = `/assets/images/600/${objectKey}`;
-
-    if (dryRun) {
-        console.log('\n[dry-run] Would invoke resize function with:');
-        console.log(`  sourceBucket:      ${ORIGINAL_BUCKET}`);
-        console.log(`  objectName:        ${objectKey}`);
-        console.log(`  destinationBucket: ${RESIZED_BUCKET}`);
-        console.log(`  resizedObjectKey:  ${resizedObjectKey}`);
-        console.log(`  would set small_url to: ${resizedUrl}`);
-        return;
-    }
-
-    console.log(`\nInvoking resize function...`);
-    console.log(`  sourceBucket:      ${ORIGINAL_BUCKET}`);
-    console.log(`  objectName:        ${objectKey}`);
-    console.log(`  destinationBucket: ${RESIZED_BUCKET}`);
-
-    await invokeImageResizeFunction({
-        sourceBucket: ORIGINAL_BUCKET,
-        objectName: objectKey,
-        destinationBucket: RESIZED_BUCKET
-    });
-
-    console.log('Resize function invoked successfully. Verifying resized object...');
-
-    const storageClient = getObjectStorageClientFromEnv();
-    const namespaceName = getObjectStorageNamespaceFromEnv();
-
-    await headObject({
-        client: storageClient,
+    await rerunImageResize({
+        image: img,
+        dryRun,
+        originalBucket: ORIGINAL_BUCKET,
+        resizedBucket: RESIZED_BUCKET,
         namespaceName,
-        bucketName: RESIZED_BUCKET,
-        objectName: resizedObjectKey
+        storageClient
     });
-
-    console.log(`Resized object verified at: ${resizedObjectKey}`);
-
-    await sql`
-        UPDATE images
-        SET small_url = ${resizedUrl}
-        WHERE id = ${imageId}
-    `;
-
-    console.log(`\nDone. Set small_url = ${resizedUrl} on image id=${imageId}`);
 }
 
-main().catch((err) => {
-    console.error(err.message || err);
-    process.exitCode = 1;
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+    main().catch((err) => {
+        console.error(err.message || err);
+        process.exitCode = 1;
+    });
+}

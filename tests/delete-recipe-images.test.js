@@ -77,6 +77,7 @@ describe('deleteMyRecipeAction image cleanup', () => {
             [
                 {
                     id: 777,
+                    preparedObjectKey: 'authors/a/recipes/s1/img.jpg',
                     fullSizeUrl: '/assets/images/original/authors/a/recipes/s1/img.jpg',
                     smallUrl: '/assets/images/600/authors/a/recipes/s1/img.jpg'
                 }
@@ -106,7 +107,7 @@ describe('deleteMyRecipeAction image cleanup', () => {
         vi.restoreAllMocks();
     });
 
-    it('deletes both 600 and 1200 variants from the resized bucket', async () => {
+    it('deletes every configured processed rendition for orphaned images', async () => {
         await deleteMyRecipeAction(
             makeFormData({
                 recipeId: '123',
@@ -117,7 +118,10 @@ describe('deleteMyRecipeAction image cleanup', () => {
         const objectNames = deleteObjectMock.mock.calls.map((c) => c[0].objectName);
 
         expect(objectNames).toContain('authors/a/recipes/s1/img.jpg');
-        expect(objectNames).toContain('600/authors/a/recipes/s1/img.jpg');
+        expect(objectNames).toContain('320/authors/a/recipes/s1/img.jpg');
+        expect(objectNames).toContain('640/authors/a/recipes/s1/img.jpg');
+        expect(objectNames).toContain('960/authors/a/recipes/s1/img.jpg');
         expect(objectNames).toContain('1200/authors/a/recipes/s1/img.jpg');
+        expect(objectNames).toContain('1600/authors/a/recipes/s1/img.jpg');
     });
 });

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { db } from '../../db/index.ts';
 import { authors, images, recipeSampleImages, recipes } from '../../db/schema.ts';
 import { getSession } from '../../lib/auth.js';
+import { hydrateRecipeImageRecord } from '../../lib/recipe-image-assets.js';
 import { deleteMySampleImageAction } from './actions.js';
 
 export const metadata = {
@@ -32,6 +33,7 @@ async function getSampleImagesUploadedByUserId({ userId, limit = 500 }) {
             recipeAuthorName: recipes.authorName,
             image: {
                 id: images.id,
+                preparedObjectKey: images.preparedObjectKey,
                 smallUrl: images.smallUrl,
                 fullSizeUrl: images.fullSizeUrl,
                 dimensions: images.dimensions,
@@ -44,7 +46,13 @@ async function getSampleImagesUploadedByUserId({ userId, limit = 500 }) {
         .leftJoin(images, eq(images.id, recipeSampleImages.imageId))
         .where(inArray(recipeSampleImages.authorId, uploaderAuthorIds))
         .orderBy(desc(images.createdAt))
-        .limit(limit);
+        .limit(limit)
+        .then((rows) =>
+            rows.map((row) => ({
+                ...row,
+                image: hydrateRecipeImageRecord(row.image)
+            }))
+        );
 }
 
 export default async function Page() {

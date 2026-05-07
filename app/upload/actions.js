@@ -20,6 +20,7 @@ import {
     computeColorToneFingerprint,
     computeNoWbFingerprint
 } from '../../lib/recipeFingerprint.js';
+import { buildRecipeImageAssetUrl } from '../../lib/recipe-image-assets.js';
 import { findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
 import { getRecipePath } from '../../lib/recipe-url.js';
 
@@ -264,6 +265,39 @@ async function findExistingImageAssociationByShaExcludingImage(sha256, excludeIm
     if (existing.length === 0) return null;
 
     return findExistingImageAssociationByImageId(existing[0].id);
+}
+
+function queueRenditionPublish({ imageId, authorId, recipeId, objectKey }) {
+    return invokeResizeWithRetry({
+        sourceBucket: ORIGINAL_BUCKET,
+        objectName: objectKey,
+        destinationBucket: RESIZED_BUCKET,
+        timeoutMs: RESIZE_TIMEOUT_MS
+    }).catch((err) => {
+        let errorType = 'invoke_error';
+        if (err instanceof ResizeTimeoutError) {
+            errorType = 'timeout';
+        } else if (err?.__verify_error) {
+            errorType = 'verify_error';
+        }
+        const warnMessage = err?.message ?? String(err);
+        const warnDetails = err?.details ?? (typeof err === 'object' ? err : null);
+        const warnPreview = err?.preview ?? null;
+        const warnCause = err?.cause ?? null;
+        console.warn('Image resize failed', {
+            error: warnMessage,
+            message: warnMessage,
+            errorType,
+            details: warnDetails,
+            preview: warnPreview,
+            cause: warnCause,
+            imageId,
+            objectKey,
+            bucket: RESIZED_BUCKET,
+            authorId,
+            recipeId
+        });
+    });
 }
 
 function buildDuplicateImageErrorMessage(duplicate) {
@@ -597,7 +631,11 @@ export async function finalizeRecipeUploadAction({ parameters }) {
             return { ok: false, error: 'Upload is missing prepared finalize state. Please upload the image again.' };
         }
 
-        const fullSizeUrl = img[0].fullSizeUrl || originalUrlForKey(preparedObjectKey);
+        const assetFullSizeUrl = buildRecipeImageAssetUrl({
+            objectKey: preparedObjectKey,
+            rendition: 'original'
+        });
+        const storedFullSizeUrl = img[0].fullSizeUrl || originalUrlForKey(preparedObjectKey);
         const resizeStatus = {
             resizeAttempted: false,
             resizeSucceeded: false,
@@ -624,8 +662,16 @@ export async function finalizeRecipeUploadAction({ parameters }) {
             if (img[0].smallUrl) {
                 resizeStatus.resizeSucceeded = true;
                 resizeStatus.resizeSkipped = true;
+            } else {
+                resizeStatus.resizeAttempted = true;
+                void queueRenditionPublish({
+                    imageId: requestedImageId,
+                    authorId: img[0].authorId,
+                    recipeId: preparedRecipeId,
+                    objectKey: preparedObjectKey
+                });
             }
-            return { ok: true, fullSizeUrl, ...resizeStatus };
+            return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
         }
 
         const namespaceName = getObjectStorageNamespaceFromEnv();
@@ -695,7 +741,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
         await db
             .update(images)
             .set({
-                fullSizeUrl,
+                fullSizeUrl: storedFullSizeUrl,
                 sha256Hash: imageSha,
                 originalFileSize: expectedOriginalFileSize ?? null,
                 finalizedAt: new Date()
@@ -704,74 +750,21 @@ export async function finalizeRecipeUploadAction({ parameters }) {
 
         await ensureRecipeSampleImageLink();
 
-        const resizedUrl = `/assets/images/600/${preparedObjectKey}`;
-        const resizedObjectName600 = `600/${preparedObjectKey}`;
-
         if (img[0].smallUrl) {
             resizeStatus.resizeSkipped = true;
             resizeStatus.resizeSucceeded = true;
-            return { ok: true, fullSizeUrl, ...resizeStatus };
+            return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
         }
 
-        try {
-            resizeStatus.resizeAttempted = true;
-            await invokeResizeWithRetry({
-                sourceBucket: ORIGINAL_BUCKET,
-                objectName: preparedObjectKey,
-                destinationBucket: RESIZED_BUCKET,
-                timeoutMs: RESIZE_TIMEOUT_MS
-            });
+        resizeStatus.resizeAttempted = true;
+        void queueRenditionPublish({
+            imageId: requestedImageId,
+            authorId: img[0].authorId,
+            recipeId: preparedRecipeId,
+            objectKey: preparedObjectKey
+        });
 
-            try {
-                await headObject({
-                    client,
-                    namespaceName,
-                    bucketName: RESIZED_BUCKET,
-                    objectName: resizedObjectName600
-                });
-            } catch (verifyErr) {
-                const wrapped = new Error(
-                    `Resized object verification failed: ${verifyErr?.message || String(verifyErr)}`
-                );
-                wrapped.__verify_error = true;
-                throw wrapped;
-            }
-
-            await db
-                .update(images)
-                .set({
-                    smallUrl: resizedUrl
-                })
-                .where(eq(images.id, requestedImageId));
-
-            resizeStatus.resizeSucceeded = true;
-        } catch (err) {
-            let errorType = 'invoke_error';
-            if (err instanceof ResizeTimeoutError) {
-                errorType = 'timeout';
-            } else if (err?.__verify_error) {
-                errorType = 'verify_error';
-            }
-            const warnMessage = err?.message ?? String(err);
-            const warnDetails = err?.details ?? (typeof err === 'object' ? err : null);
-            const warnPreview = err?.preview ?? null;
-            const warnCause = err?.cause ?? null;
-            console.warn('Image resize failed', {
-                error: warnMessage,
-                message: warnMessage,
-                errorType,
-                details: warnDetails,
-                preview: warnPreview,
-                cause: warnCause,
-                imageId: requestedImageId,
-                objectKey: preparedObjectKey,
-                bucket: RESIZED_BUCKET,
-                authorId: img[0].authorId,
-                recipeId: preparedRecipeId
-            });
-        }
-
-        return { ok: true, fullSizeUrl, ...resizeStatus };
+        return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
     } catch (e) {
         console.error(e);
         return { ok: false, error: e?.message || String(e) };

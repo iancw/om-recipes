@@ -2,6 +2,7 @@ import { db } from '../../../db/index.ts';
 import { authors, images, recipeComparisonImages, recipeSampleImages, recipes, savedRecipes } from '../../../db/schema.ts';
 import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { getSession } from '../../../lib/auth.js';
+import { hydrateRecipeImageRecord } from '../../../lib/recipe-image-assets.js';
 import { normalizeRecipeSort, RECIPE_SORT_VALUES } from '../../../lib/recipe-sort.js';
 import { getSavedRecipeIdsForUser } from '../../../lib/recipe-saves.js';
 
@@ -152,6 +153,7 @@ export async function GET(request) {
         label: recipeComparisonImages.label,
         image: {
           id: images.id,
+          preparedObjectKey: images.preparedObjectKey,
           smallUrl: images.smallUrl,
           fullSizeUrl: images.fullSizeUrl,
           dimensions: images.dimensions,
@@ -168,6 +170,7 @@ export async function GET(request) {
         recipeId: recipeSampleImages.recipeId,
         image: {
           id: images.id,
+          preparedObjectKey: images.preparedObjectKey,
           smallUrl: images.smallUrl,
           fullSizeUrl: images.fullSizeUrl,
           dimensions: images.dimensions,
@@ -222,12 +225,16 @@ export async function GET(request) {
 
   const comparisonByRecipeId = groupByRecipeId(comparisonRows, (row) => {
     if (!row.image?.id) return null;
-    return { ...row.image, label: row.label };
+    return { ...hydrateRecipeImageRecord(row.image), label: row.label };
   });
 
   const sampleImagesByRecipeId = groupByRecipeId(sampleRows, (row) => {
     if (!row.image?.id) return null;
-    return { ...row.image, isPrimary: row.isPrimary, sampleAuthor: row.author ?? null };
+    return {
+      ...hydrateRecipeImageRecord(row.image),
+      isPrimary: row.isPrimary,
+      sampleAuthor: row.author ?? null
+    };
   });
 
   const results = pageRecipes.map((r) => {

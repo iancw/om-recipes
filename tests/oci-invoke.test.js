@@ -35,6 +35,7 @@ const ENV_KEYS = [
     'OCI_PRIVATE_KEY_B64',
     'OCI_REGION',
     'OCI_FUNCTIONS_INVOKE_ENDPOINT',
+    'OCI_PROCESS_IMAGE_FUNCTION_ID',
     'OCI_IMAGE_RESIZE_FUNCTION_ID'
 ];
 
@@ -47,6 +48,7 @@ function setValidEnv() {
     );
     process.env.OCI_REGION = 'us-poenix-1';
     process.env.OCI_FUNCTIONS_INVOKE_ENDPOINT = 'https://functions.example.com';
+    process.env.OCI_PROCESS_IMAGE_FUNCTION_ID = 'ocid1.fnfunc.oc1..dddd';
     process.env.OCI_IMAGE_RESIZE_FUNCTION_ID = 'ocid1.fnfunc.oc1..cccc';
 }
 
@@ -87,12 +89,54 @@ describe('lib/oci/functionsInvoke', () => {
 
     it('throws clear error when function id env missing', async () => {
         setValidEnv();
+        delete process.env.OCI_PROCESS_IMAGE_FUNCTION_ID;
         delete process.env.OCI_IMAGE_RESIZE_FUNCTION_ID;
         const { invokeImageResizeFunction } = await import('../lib/oci/functionsInvoke.js');
 
         await expect(invokeImageResizeFunction({ sourceBucket: 'src', objectName: 'a.jpg' })).rejects.toThrow(
-            'Missing OCI_IMAGE_RESIZE_FUNCTION_ID env var'
+            'Missing OCI_PROCESS_IMAGE_FUNCTION_ID or OCI_IMAGE_RESIZE_FUNCTION_ID env var'
         );
+    });
+
+    it('prefers OCI_PROCESS_IMAGE_FUNCTION_ID when both function env vars are set', async () => {
+        setValidEnv();
+        const { invokeImageResizeFunction } = await import('../lib/oci/functionsInvoke.js');
+        const functionsMod = await import('oci-functions');
+        const spy = vi
+            .spyOn(functionsMod.FunctionsInvokeClient.prototype, 'invokeFunction')
+            .mockResolvedValue({ response: { status: 200 }, data: Buffer.from(JSON.stringify({ ok: true })) });
+
+        await invokeImageResizeFunction({ sourceBucket: 'src', objectName: 'a.jpg' });
+
+        const [requestArg] = spy.mock.calls[0];
+        expect(requestArg.functionId).toBe('ocid1.fnfunc.oc1..dddd');
+    });
+
+    it('falls back to OCI_IMAGE_RESIZE_FUNCTION_ID when the new function env var is absent', async () => {
+        setValidEnv();
+        delete process.env.OCI_PROCESS_IMAGE_FUNCTION_ID;
+        const { invokeImageResizeFunction } = await import('../lib/oci/functionsInvoke.js');
+        const functionsMod = await import('oci-functions');
+        const spy = vi
+            .spyOn(functionsMod.FunctionsInvokeClient.prototype, 'invokeFunction')
+            .mockResolvedValue({ response: { status: 200 }, data: Buffer.from(JSON.stringify({ ok: true })) });
+
+        await invokeImageResizeFunction({ sourceBucket: 'src', objectName: 'a.jpg' });
+
+        const [requestArg] = spy.mock.calls[0];
+        expect(requestArg.functionId).toBe('ocid1.fnfunc.oc1..cccc');
+    });
+
+    it('warmImageResizeFunction prefers OCI_PROCESS_IMAGE_FUNCTION_ID', async () => {
+        setValidEnv();
+        const { warmImageResizeFunction } = await import('../lib/oci/functionsInvoke.js');
+        const functionsMod = await import('oci-functions');
+        const spy = vi.spyOn(functionsMod.FunctionsInvokeClient.prototype, 'invokeFunction').mockResolvedValue({});
+
+        await warmImageResizeFunction();
+
+        const [requestArg] = spy.mock.calls[0];
+        expect(requestArg.functionId).toBe('ocid1.fnfunc.oc1..dddd');
     });
 
     it('success: returns parsed JSON on 2xx ok:true', async () => {
@@ -116,23 +160,97 @@ describe('lib/oci/functionsInvoke', () => {
             .spyOn(functionsMod.FunctionsInvokeClient.prototype, 'invokeFunction')
             .mockResolvedValue({ response: { status: 200 }, data: Buffer.from(JSON.stringify({ ok: true })) });
 
-        await invokeImageResizeFunction({ sourceBucket: 'src', objectName: 'a.jpg', destinationBucket: 'dst' });
+        await invokeImageResizeFunction({
+            sourceBucket: 'src',
+            objectName: 'authors/a/recipes/r/image.jpg',
+            destinationBucket: 'dst'
+        });
 
         const [requestArg] = spy.mock.calls[0];
         expect(typeof requestArg.invokeFunctionBody).toBe('string');
         const payload = JSON.parse(requestArg.invokeFunctionBody);
         expect(payload).toEqual({
             sourceBucket: 'src',
-            objectName: 'a.jpg',
+            objectName: 'authors/a/recipes/r/image.jpg',
             destinationBucket: 'dst',
             data: {
-                resourceName: 'a.jpg',
+                resourceName: 'authors/a/recipes/r/image.jpg',
                 additionalDetails: {
                     bucketName: 'src',
-                    objectName: 'a.jpg'
+                    objectName: 'authors/a/recipes/r/image.jpg'
                 }
             }
         });
+    });
+
+    it('omits destinationBucket from the invoke payload when not provided', async () => {
+        setValidEnv();
+        const { invokeImageResizeFunction } = await import('../lib/oci/functionsInvoke.js');
+        const functionsMod = await import('oci-functions');
+        const spy = vi
+            .spyOn(functionsMod.FunctionsInvokeClient.prototype, 'invokeFunction')
+            .mockResolvedValue({ response: { status: 200 }, data: Buffer.from(JSON.stringify({ ok: true })) });
+
+        await invokeImageResizeFunction({
+            sourceBucket: 'src',
+            objectName: 'authors/a/recipes/r/image.jpg'
+        });
+
+        const [requestArg] = spy.mock.calls[0];
+        const payload = JSON.parse(requestArg.invokeFunctionBody);
+        expect(payload).toEqual({
+            sourceBucket: 'src',
+            objectName: 'authors/a/recipes/r/image.jpg',
+            data: {
+                resourceName: 'authors/a/recipes/r/image.jpg',
+                additionalDetails: {
+                    bucketName: 'src',
+                    objectName: 'authors/a/recipes/r/image.jpg'
+                }
+            }
+        });
+    });
+
+    it('sends objectNames in the invoke payload for batch image migration', async () => {
+        setValidEnv();
+        const { invokeImageResizeFunction } = await import('../lib/oci/functionsInvoke.js');
+        const functionsMod = await import('oci-functions');
+        const spy = vi
+            .spyOn(functionsMod.FunctionsInvokeClient.prototype, 'invokeFunction')
+            .mockResolvedValue({ response: { status: 200 }, data: Buffer.from(JSON.stringify({ ok: true })) });
+
+        await invokeImageResizeFunction({
+            sourceBucket: 'src',
+            objectNames: ['authors/a/recipes/r/one.jpg', 'authors/a/recipes/r/two.jpg'],
+            destinationBucket: 'dst'
+        });
+
+        const [requestArg] = spy.mock.calls[0];
+        expect(JSON.parse(requestArg.invokeFunctionBody)).toEqual({
+            sourceBucket: 'src',
+            objectNames: ['authors/a/recipes/r/one.jpg', 'authors/a/recipes/r/two.jpg'],
+            destinationBucket: 'dst',
+            data: {
+                resourceName: 'authors/a/recipes/r/one.jpg',
+                additionalDetails: {
+                    bucketName: 'src',
+                    objectName: 'authors/a/recipes/r/one.jpg'
+                }
+            }
+        });
+    });
+
+    it('rejects batch invoke calls that pass both objectName and objectNames', async () => {
+        setValidEnv();
+        const { invokeImageResizeFunction } = await import('../lib/oci/functionsInvoke.js');
+
+        await expect(
+            invokeImageResizeFunction({
+                sourceBucket: 'src',
+                objectName: 'authors/a/recipes/r/image.jpg',
+                objectNames: ['authors/a/recipes/r/one.jpg']
+            })
+        ).rejects.toThrow('Provide either objectName or objectNames, not both');
     });
 
     it('supports OCI SDK invoke responses that only return value/opcRequestId', async () => {

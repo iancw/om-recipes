@@ -20,6 +20,7 @@
     "db:upload:comparison-images": "node scripts/upload-comparison-images.mjs",
     "db:backfill:recipe-fingerprints": "node --env-file=.env.local --import tsx/esm scripts/backfill-recipe-fingerprints.mjs",
     "db:backup:object-storage": "node scripts/backup-database-to-object-storage.mjs",
+    "image:migrate-bucket": "node scripts/migrate-image-bucket.mjs",
     "image:rerun-resize": "node scripts/rerun-image-resize.mjs",
     "privacy:cleanup": "node scripts/privacy-retention-cleanup.mjs"
   },

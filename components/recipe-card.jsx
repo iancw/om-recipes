@@ -2,13 +2,13 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import RecipeSettings from "./RecipeSettings";
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import AuthorSocialLinks from './AuthorSocialLinks';
 import DeleteConfirmationModal from './DeleteConfirmationModal.jsx';
+import RecipePreviewImage from './RecipePreviewImage.jsx';
 import {
-  getRecipeDownloadImage,
-  getRecipePreviewImage,
+  getRecipeCardPreviewUrl,
+  getRecipeDownloadUrl,
   SAMPLE_IMAGE_SELECTION
 } from '../lib/recipe-image-selection.js';
 import { Badge } from './ui/badge.jsx';
@@ -46,6 +46,8 @@ export default function RecipeCard({
   const [isRecipeSaved, setIsRecipeSaved] = useState(Boolean(recipe?.isSaved));
   const [saveToggleError, setSaveToggleError] = useState('');
   const [isSaveTogglePending, setIsSaveTogglePending] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  const [isDownloadingImage, setIsDownloadingImage] = useState(false);
 
   const recipeName = recipe?.recipeName ?? '';
   const recipeDescription = recipe?.description ?? '';
@@ -74,12 +76,8 @@ export default function RecipeCard({
     setIsRecipeSaved(Boolean(recipe?.isSaved));
   }, [recipe?.isSaved, recipe?.id]);
 
-  const previewImage = getRecipePreviewImage(recipe, selectedImageOption);
-  const downloadImage = getRecipeDownloadImage(recipe);
-  const downloadImageHref =
-    downloadImage?.fullSizeUrl ?? downloadImage?.smallUrl ?? null;
-
-  const previewUrl = previewImage?.smallUrl ?? previewImage?.fullSizeUrl ?? null;
+  const downloadImageHref = getRecipeDownloadUrl(recipe);
+  const previewUrl = getRecipeCardPreviewUrl(recipe, selectedImageOption);
 
   const slug = recipe?.slug ?? '';
   const oesHref = slug ? `/oes/${slug}.oes` : '#';
@@ -227,6 +225,56 @@ export default function RecipeCard({
     }
   };
 
+  const handleDownloadRecipeImage = async () => {
+    if (!downloadImageHref || isDownloadingImage) return;
+
+    setDownloadError('');
+
+    let resolvedUrl;
+    try {
+      resolvedUrl = new URL(downloadImageHref, window.location.href);
+    } catch {
+      window.open(downloadImageHref, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const suggestedFilename = slug ? `${slug}.jpg` : 'recipe-image.jpg';
+
+    const triggerDownload = (href) => {
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = suggestedFilename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    };
+
+    if (resolvedUrl.origin === window.location.origin) {
+      triggerDownload(resolvedUrl.href);
+      return;
+    }
+
+    setIsDownloadingImage(true);
+
+    try {
+      const response = await fetch(resolvedUrl.href, { mode: 'cors', credentials: 'omit' });
+      if (!response.ok) {
+        throw new Error(`Download failed with status ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      triggerDownload(objectUrl);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (error) {
+      console.error('Failed to download recipe image directly', error);
+      setDownloadError('Direct download was unavailable, so the image was opened in a new tab.');
+      window.open(resolvedUrl.href, '_blank', 'noopener,noreferrer');
+    } finally {
+      setIsDownloadingImage(false);
+    }
+  };
+
   return (
     <div className="flex w-full flex-col gap-4 items-start">
       {(canEdit || canDelete) && (
@@ -353,13 +401,14 @@ export default function RecipeCard({
                 </a>
               ) : null}
               {downloadImageHref && (
-                <a
-                  href={downloadImageHref}
-                  download={slug || undefined}
-                  className={buttonVariants({ variant: 'outline', className: 'no-underline' })}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDownloadRecipeImage}
+                  disabled={isDownloadingImage}
                 >
-                  Download Recipe Image
-                </a>
+                  {isDownloadingImage ? 'Downloading…' : 'Download Recipe Image'}
+                </Button>
               )}
             </div>
           </div>
@@ -371,18 +420,22 @@ export default function RecipeCard({
         {saveToggleError ? (
           <p className="text-sm text-destructive">{saveToggleError}</p>
         ) : null}
+        {downloadError ? (
+          <p className="text-sm text-destructive">{downloadError}</p>
+        ) : null}
 
         {(editing || recipeDescription || recipeSourceUrl || previewUrl) && (
           <div className="recipe-notes-image-row rounded-[1.5rem] border border-border/70 bg-muted/25 p-4 sm:p-5">
             {previewUrl && (
               <div className="flex flex-[0_0_auto] flex-col items-center">
-                <Image
+                <RecipePreviewImage
                   src={previewUrl}
-                  alt="Lighthouse"
+                  alt="Recipe Sample Image"
                   width={400}
                   height={300}
                   sizes="(min-width: 1280px) 400px, (min-width: 768px) 45vw, 100vw"
-                  className="max-h-[300px] w-auto max-w-full rounded-xl border border-border/60 object-cover"
+                  imageClassName="max-h-[300px] w-auto max-w-full rounded-xl border border-border/60 object-cover"
+                  placeholderClassName="h-[300px] w-full max-w-[400px] rounded-xl border border-border/60 bg-background/70"
                 />
               </div>
             )}

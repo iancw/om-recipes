@@ -1,10 +1,14 @@
 'use client';
 import React, { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import AuthorSocialLinks from './AuthorSocialLinks';
 import DeleteConfirmationModal from './DeleteConfirmationModal.jsx';
-import { formatComparisonImageLabelForDisplay } from '../lib/recipe-image-selection';
+import RecipePreviewImage from './RecipePreviewImage.jsx';
+import {
+  formatComparisonImageLabelForDisplay,
+  getImagePreviewUrl,
+  getRecipeModalImageUrl
+} from '../lib/recipe-image-selection';
 
 function collectSocialLinks(author) {
   if (!author) return [];
@@ -28,17 +32,8 @@ function normalizeImages(images) {
   return (images ?? [])
     .map((img, idx) => {
       if (!img) return null;
-      // Thumbnails should prefer the smaller (600px) variant.
-      const smallSrc = img.smallUrl || img.fullSizeUrl || null;
-
-      // Modal (large view) should prefer the 1200px variant.
-      // If `fullSizeUrl` points at original, rewrite to /1200/.
-      // If we don't have a 1200 variant, fall back to original.
-      let fullSrc = img.fullSizeUrl || img.smallUrl || null;
-      if (typeof fullSrc === 'string' && fullSrc.startsWith('/assets/images/original/')) {
-        const key = fullSrc.slice('/assets/images/original/'.length);
-        fullSrc = `/assets/images/1200/${key}`;
-      }
+      const smallSrc = getImagePreviewUrl(img);
+      const fullSrc = getRecipeModalImageUrl(img);
       if (!smallSrc && !fullSrc) return null;
 
       const sampleAuthor = img.sampleAuthor ?? null;
@@ -227,13 +222,14 @@ export default function SampleGallery({
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'block', position: 'relative', height: 180, width: 240, borderRadius: 8, overflow: 'hidden' }}
               title={img.label ? formatComparisonImageLabelForDisplay(img.label) : ''}
             >
-              <Image
+              <RecipePreviewImage
                 src={img.displaySrc}
                 alt={img.label ? `Sample (${formatComparisonImageLabelForDisplay(img.label)})` : 'Sample image'}
                 fill
                 sizes="(min-width: 1024px) 200px, (min-width: 768px) 150px, 120px"
                 priority={idx === 0}
-                className="object-cover"
+                imageClassName="object-cover"
+                placeholderClassName="absolute inset-0 bg-muted/40"
               />
             </button>
             {canSetPrimary && (
@@ -300,13 +296,14 @@ export default function SampleGallery({
               </button>
             )}
 
-            <Image
+            <RecipePreviewImage
               src={activeImage.modalSrc}
               alt={activeImage.label ? `Sample (${formatComparisonImageLabelForDisplay(activeImage.label)})` : 'Sample image'}
               width={1200}
               height={900}
               sizes="(min-width: 1024px) 1200px, 100vw"
-              className="rounded-lg shadow-lg object-contain"
+              imageClassName="rounded-lg shadow-lg object-contain"
+              placeholderClassName="min-h-[320px] w-full rounded-lg bg-white/10 text-white"
               style={{ maxHeight: '80vh', width: '100%', height: 'auto' }}
             />
 

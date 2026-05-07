@@ -1,13 +1,12 @@
 import React from "react";
-import Image from "next/image";
-import { getRecipePreviewImage, SAMPLE_IMAGE_SELECTION } from "../lib/recipe-image-selection.js";
+import RecipePreviewImage from "./RecipePreviewImage.jsx";
+import { getRecipeCardPreviewUrl, SAMPLE_IMAGE_SELECTION } from "../lib/recipe-image-selection.js";
 import { Badge } from "./ui/badge.jsx";
 import { Card, CardContent } from "./ui/card.jsx";
 import { cn } from "../lib/cn.js";
 
 export default function RecipeSimpleCard({ recipe, onClick, selectedImageOption = SAMPLE_IMAGE_SELECTION, priority = false }) {
-  const previewImage = getRecipePreviewImage(recipe, selectedImageOption);
-  const previewUrl = previewImage?.smallUrl || previewImage?.fullSizeUrl;
+  const previewUrl = getRecipeCardPreviewUrl(recipe, selectedImageOption);
 
   const getTruncatedNotes = (notes) => {
     if (!notes) return "";
@@ -23,13 +22,14 @@ export default function RecipeSimpleCard({ recipe, onClick, selectedImageOption 
     >
       <div className="relative aspect-[4/3] overflow-hidden border-b border-border/60 bg-muted/40">
         {previewUrl ? (
-          <Image
+          <RecipePreviewImage
             src={previewUrl}
             alt={`${recipe.recipeName} sample`}
             fill
             priority={priority}
-            className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
             sizes="(min-width: 1536px) 24rem, (min-width: 1024px) 30vw, (min-width: 768px) 45vw, 100vw"
+            imageClassName="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            placeholderClassName="absolute inset-0 bg-muted/40"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No sample image</div>

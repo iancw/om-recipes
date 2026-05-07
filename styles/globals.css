@@ -3,29 +3,41 @@
 @import 'tailwindcss';
 
 @theme {
-    --color-background: #f5efe2;
-    --color-foreground: #1d2924;
-    --color-card: #fffaf0;
-    --color-card-foreground: #1d2924;
-    --color-popover: #fffaf0;
-    --color-popover-foreground: #1d2924;
+    --color-background: #f0eee9;
+    --color-foreground: #2b2c30;
+    --color-card: #ffffff;
+    --color-card-foreground: #2b2c30;
+    --color-popover: #ffffff;
+    --color-popover-foreground: #2b2c30;
+
+    --background-image-body-spotlight: radial-gradient(
+        circle at 18% 10%,
+        color-mix(in srgb, var(--color-card) 40%, white) 0,
+        transparent 26%
+    );
+    --background-image-body-base: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--color-background) 98%, white),
+        color-mix(in srgb, var(--color-background) 92%, var(--color-secondary))
+    );
+
     --background-image-noise: linear-gradient(
             to bottom,
             color-mix(in oklab, var(--color-neutral-950) 0%, transparent),
             color-mix(in oklab, var(--color-neutral-950) 100%, transparent)
         );
-    --color-primary: #285d50;
-    --color-primary-foreground: #f7f2e8;
-    --color-secondary: #d8ccb0;
-    --color-secondary-foreground: #1d2924;
-    --color-accent: #e6dcc4;
-    --color-accent-foreground: #1d2924;
-    --color-muted: #ede5d5;
-    --color-muted-foreground: #58665f;
-    --color-border: #d1c5ad;
-    --color-ring: #285d50;
-    --color-destructive: #b33b2e;
-    --color-destructive-foreground: #fff7f3;
+    --color-primary: #2a5c6a;
+    --color-primary-foreground: #f0eee9;
+    --color-secondary: #ddd5c7;
+    --color-secondary-foreground: #2b2c30;
+    --color-accent: #ede6db;
+    --color-accent-foreground: #2b2c30;
+    --color-muted: #ded7c8;
+    --color-muted-foreground: #948a77;
+    --color-border: #d2cfc4;
+    --color-ring: #2a5c6a;
+    --color-destructive: #9f2436;
+    --color-destructive-foreground: #f0eee9;
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
     --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
@@ -38,9 +50,7 @@
 
     body {
         @apply min-h-screen bg-background text-foreground;
-        background-image:
-            radial-gradient(circle at top left, color-mix(in srgb, var(--color-secondary) 65%, white) 0, transparent 34%),
-            linear-gradient(180deg, color-mix(in srgb, var(--color-background) 88%, white), var(--color-background));
+        background-image: var(--background-image-body-spotlight), var(--background-image-body-base);
     }
 
     h1 {

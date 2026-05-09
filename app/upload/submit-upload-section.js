@@ -1,4 +1,4 @@
-function buildPrepareParameters({ file, section, matchedRecipe }) {
+function buildPrepareParameters({ file, section, matchedRecipe, mode }) {
     return {
         author: section.form.author,
         name: section.form.name,
@@ -6,16 +6,39 @@ function buildPrepareParameters({ file, section, matchedRecipe }) {
         sourceUrl: section.form.sourceUrl,
         imageMeta: { name: file.name, type: file.type, size: file.size },
         recipeSettings: section.recipeSettings,
-        mode: section.mode,
+        mode,
         matchedRecipe
+    };
+}
+
+function normalizeRecipeIdentity(recipe) {
+    const slug = String(recipe?.slug ?? '').trim();
+    const uuid = String(recipe?.uuid ?? recipe?.recipeUuid ?? '').trim();
+
+    if (!slug || !uuid) return null;
+
+    return { slug, uuid };
+}
+
+function recipeContextFromPrepare(prep) {
+    const slug = String(prep?.slug ?? '').trim();
+    const uuid = String(prep?.recipeUuid ?? '').trim();
+
+    if (!slug || !uuid) return null;
+
+    return {
+        id: prep?.recipeId ?? null,
+        slug,
+        uuid
     };
 }
 
 async function uploadOneFile({ file, section, prepare, directUpload, finalize, matchedRecipe }) {
     let prep;
+    const mode = matchedRecipe ? 'attach' : section.mode;
 
     try {
-        prep = await prepare(buildPrepareParameters({ file, section, matchedRecipe }));
+        prep = await prepare(buildPrepareParameters({ file, section, matchedRecipe, mode }));
     } catch (error) {
         return { ok: false, stage: 'prepare', error: error?.message || String(error) };
     }
@@ -25,7 +48,15 @@ async function uploadOneFile({ file, section, prepare, directUpload, finalize, m
     }
 
     try {
-        await directUpload({ file, parUrl: prep.parUrl });
+        const uploadResult = await directUpload({ file, parUrl: prep.parUrl });
+        if (uploadResult?.ok === false) {
+            return {
+                ok: false,
+                stage: 'direct-upload',
+                error: uploadResult?.error || 'Direct upload failed',
+                prep
+            };
+        }
     } catch (error) {
         return { ok: false, stage: 'direct-upload', error: error?.message || String(error), prep };
     }
@@ -64,22 +95,26 @@ export async function submitUploadSection({ section, prepare, directUpload, fina
         });
 
         if (!result.ok) {
+            const failedCreatedRecipe = result.prep?.shouldCreateRecipe ? normalizeRecipeIdentity(result.prep) : null;
+            const failedMatchedRecipe = failedCreatedRecipe ?? normalizeRecipeIdentity(matchedRecipe);
+
             return {
                 ok: false,
                 uploadedCount: successes.length,
                 failedFile: file.name,
                 failedStage: result.stage,
                 error: result.error,
-                createdRecipe,
-                matchedRecipe
+                createdRecipe: createdRecipe ?? failedCreatedRecipe,
+                matchedRecipe: failedMatchedRecipe
             };
         }
 
         if (result.prep.shouldCreateRecipe) {
-            createdRecipe = { slug: result.prep.slug, uuid: result.prep.recipeUuid };
+            createdRecipe = normalizeRecipeIdentity(result.prep);
+            matchedRecipe = recipeContextFromPrepare(result.prep);
+        } else {
+            matchedRecipe = result.prep.matchedRecipe ?? matchedRecipe;
         }
-
-        matchedRecipe = result.prep.matchedRecipe ?? matchedRecipe;
         successes.push(file.name);
     }
 
@@ -89,6 +124,6 @@ export async function submitUploadSection({ section, prepare, directUpload, fina
         failedFile: null,
         failedStage: null,
         createdRecipe,
-        matchedRecipe
+        matchedRecipe: normalizeRecipeIdentity(matchedRecipe)
     };
 }

@@ -1,646 +1,262 @@
 'use client';
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+
+import React, { useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import {
-  finalizeRecipeUploadAction,
-  prepareRecipeUploadAction,
-  findRecipeMatchAction
-} from './actions';
 import { dispose as disposeExifTool, parseMetadata } from '@uswriting/exiftool';
-import { parseRecipeSettingsFromExif, RECIPE_EXIFTOOL_ARGS } from 'lib/exifparse';
+
 import { Alert } from 'components/alert';
-import { Button, buttonVariants } from 'components/ui/button';
+import { Button } from 'components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from 'components/ui/card';
-import { Input } from 'components/ui/input';
-import { Textarea } from 'components/ui/textarea';
 import { cn } from 'lib/cn';
-import { getRecipePath } from 'lib/recipe-url.js';
-import { createUploadPreviewUrl, shouldDisableUploadPreview } from 'lib/upload-preview.js';
-import { getUploadProgressMessage } from 'lib/upload-status.js';
-import UploadPreviewThumb from './UploadPreviewThumb';
-import DetectedRecipeSettingsCard from './DetectedRecipeSettingsCard';
+import { parseRecipeSettingsFromExif, RECIPE_EXIFTOOL_ARGS } from 'lib/exifparse';
+import { computeRecipeFingerprint } from 'lib/recipeFingerprint.js';
+
+import { buildUploadSections } from './group-upload-candidates.js';
+import InvalidUploadFilesCard from './InvalidUploadFilesCard.jsx';
+import RecipeUploadSection from './RecipeUploadSection.jsx';
+import { buildSectionRenderKey } from './render-boundaries.js';
+
+function buildCandidateId(file, index) {
+  const safeName = String(file?.name || 'file').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  return `${safeName || 'file'}-${file?.lastModified || 0}-${file?.size || 0}-${index}`;
+}
+
+function buildRejectionError(errors) {
+  if (!Array.isArray(errors) || errors.length === 0) {
+    return 'Unsupported file.';
+  }
+
+  return errors
+    .map((error) => error?.message || 'Unsupported file.')
+    .filter(Boolean)
+    .join(' ');
+}
+
+let exifBatchQueue = Promise.resolve();
+
+export function runExclusiveExifBatch(task) {
+  const queuedTask = exifBatchQueue.then(task, task);
+  exifBatchQueue = queuedTask.catch(() => {});
+  return queuedTask;
+}
+
+export function shouldApplyUploadRequestResult(activeRequestId, requestId) {
+  return activeRequestId === requestId;
+}
 
 export default function RecipeUpload({ initialAuthor = "" }) {
-  const FINALIZING_NOTICE_DELAY_MS = 5000;
+  const [candidates, setCandidates] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [invalidFiles, setInvalidFiles] = useState([]);
+  const [dropError, setDropError] = useState('');
+  const [isParsingFiles, setIsParsingFiles] = useState(false);
+  const [reviewBatchId, setReviewBatchId] = useState(0);
+  const latestDropRequestRef = useRef(0);
 
-  const router = useRouter();
-  const [author, setAuthor] = useState(initialAuthor);
-  const [name, setName] = useState("");
-  const [notes, setNotes] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [imageFiles, setImageFiles] = useState([]);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [disablePreview, setDisablePreview] = useState(false);
-  const [isPreparingPreview, setIsPreparingPreview] = useState(false);
-  const [recipe, setRecipeDetails] = useState(null)
-  const [exifError, setExifError] = useState("");
-  const [isParsingExif, setIsParsingExif] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState('idle'); // idle | uploading | ok | error
-  const [uploadError, setUploadError] = useState('');
-  const [uploadedSlug, setUploadedSlug] = useState('');
-  const [uploadedRecipeUuid, setUploadedRecipeUuid] = useState('');
-  const [uploadPhase, setUploadPhase] = useState(''); // preparing | direct-upload | finalizing
-  const [matchingRecipe, setMatchingRecipe] = useState(null);
-  const [matchType, setMatchType] = useState(null); // 'full' | 'no-wb' | null
-  const [similarRecipes, setSimilarRecipes] = useState([]);
-  const [matchError, setMatchError] = useState('');
-  const [isCheckingMatch, setIsCheckingMatch] = useState(false);
-  const [lastUploadMode, setLastUploadMode] = useState('create'); // create | attach
-  const [missingColorProfile, setMissingColorProfile] = useState(false);
-  const [showFinalizingNotice, setShowFinalizingNotice] = useState(false);
-  const omWorkspaceWarning = recipe?.isOmWorkspace
-    ? 'Warning: This JPG was produced by OM Workspace. JPGs produced by OM Workspace may not have accurate recipe data in EXIF. CAREFULLY CHECK the recipe data shown before uploading.'
-    : '';
-  const uploadProgressMessage = getUploadProgressMessage(uploadPhase);
-
-  const hasDroppedImage = imageFiles?.length > 0;
-  const hasRedirectedRef = useRef(false);
-
-  useEffect(() => {
-    setDisablePreview(shouldDisableUploadPreview(window.navigator?.deviceMemory));
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    let nextUrl = null;
-
-    if (!imageFiles?.length || disablePreview) {
-      setIsPreparingPreview(false);
-      setPreviewUrl(null);
-      return;
-    }
-
-    setIsPreparingPreview(true);
-
-    createUploadPreviewUrl(imageFiles[0])
-      .then((url) => {
-        if (!active) {
-          if (url) URL.revokeObjectURL(url);
-          return;
-        }
-        nextUrl = url;
-        setPreviewUrl(url);
-      })
-      .catch(() => {
-        if (!active) return;
-        setPreviewUrl(null);
-      })
-      .finally(() => {
-        if (!active) return;
-        setIsPreparingPreview(false);
-      });
-
-    return () => {
-      active = false;
-      if (nextUrl) URL.revokeObjectURL(nextUrl);
-    };
-  }, [disablePreview, imageFiles]);
-
-  useEffect(() => {
-    if (!hasDroppedImage || !recipe) {
-      if (!hasDroppedImage) {
-        setMatchingRecipe(null);
-        setMatchType(null);
-        setSimilarRecipes([]);
-        setMatchError('');
-      } else {
-        setMatchingRecipe(null);
-        setMatchType(null);
-        setSimilarRecipes([]);
-      }
-      setIsCheckingMatch(false);
-      return;
-    }
-    let cancelled = false;
-    setIsCheckingMatch(true);
-    setMatchError('');
-
-    findRecipeMatchAction({
-      parameters: {
-        recipeSettings: recipe
-      }
-    })
-      .then((res) => {
-        if (cancelled) return;
-        if (!res?.ok) {
-          setMatchError(res?.error || 'Failed to check for existing recipes');
-          setMatchingRecipe(null);
-          setMatchType(null);
-          setSimilarRecipes([]);
-          return;
-        }
-
-        // Full, no-wb, and color-tone matches all block the upload form.
-        const blockingMatch = res.full ?? res.noWb ?? res.colorTone ?? null;
-        setMatchingRecipe(blockingMatch);
-        setMatchType(blockingMatch ? (res.full ? 'full' : (res.noWb ? 'no-wb' : 'color-tone')) : null);
-
-        // Build deduplicated list of informational partial matches.
-        // no-wb and color-tone are excluded here since they're treated as blocking matches above.
-        const seenIds = new Set(blockingMatch ? [blockingMatch.id] : []);
-        const partials = [];
-        const addIfNew = (type, recipe, label) => {
-          if (!recipe || seenIds.has(recipe.id)) return;
-          seenIds.add(recipe.id);
-          partials.push({ type, recipe, label });
-        };
-        addIfNew('color', res.color, 'Same color wheel');
-        setSimilarRecipes(partials);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error(err);
-        setMatchError(err?.message || 'Failed to check for existing recipes');
-        setMatchingRecipe(null);
-        setSimilarRecipes([]);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setIsCheckingMatch(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [hasDroppedImage, recipe]);
-
-  useEffect(() => {
-    if (uploadStatus !== 'uploading' || uploadPhase !== 'finalizing') {
-      setShowFinalizingNotice(false);
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setShowFinalizingNotice(true);
-    }, FINALIZING_NOTICE_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [uploadPhase, uploadStatus]);
+  const hasReviewState = sections.length > 0 || invalidFiles.length > 0;
+  const parsedImageCount = sections.reduce((count, section) => count + section.fileIds.length, 0);
 
   const parseExif = async (file) => {
-    try {
-      const result = await parseMetadata(file, {
-        args: RECIPE_EXIFTOOL_ARGS
-      });
-      if (!result?.success) {
-        throw new Error(result?.error || 'Unable to read EXIF metadata');
-      }
-      return parseRecipeSettingsFromExif(result.data);
-    } finally {
-      // Release the cached WASM/virtual filesystem once parsing completes to
-      // keep mobile Safari from carrying that memory through the rest of upload.
-      await disposeExifTool().catch(() => {});
+    const result = await parseMetadata(file, {
+      args: RECIPE_EXIFTOOL_ARGS
+    });
+
+    if (!result?.success) {
+      throw new Error(result?.error || 'Unable to read EXIF metadata');
     }
+
+    return parseRecipeSettingsFromExif(result.data);
   };
 
-  const onDrop = async (acceptedFiles) => {
-    const file = acceptedFiles?.[0];
-    setImageFiles(acceptedFiles);
-    setExifError("");
-    setIsParsingExif(true);
-    setMissingColorProfile(false);
-    try {
-      // Best-effort prefill of recipe name from filename.
-      if (file && !name?.trim()) {
-        const base = String(file.name || '').replace(/\.[a-z0-9]+$/i, '').trim();
-        if (base) setName(base);
-      }
+  const clearReview = () => {
+    latestDropRequestRef.current += 1;
+    setCandidates([]);
+    setSections([]);
+    setInvalidFiles([]);
+    setDropError('');
+    setIsParsingFiles(false);
+  };
 
-      const recipe = await parseExif(file);
-      if (!recipe?.hasColorProfileSettings) {
-        setRecipeDetails(null);
-        setExifError('No recipe found. Upload straight out of camera JPGs from OM-3, Pen-F, or E-P7 cameras.');
-        setMissingColorProfile(true);
+  const onDrop = async (acceptedFiles, fileRejections = []) => {
+    const requestId = latestDropRequestRef.current + 1;
+    latestDropRequestRef.current = requestId;
+    setIsParsingFiles(true);
+    setDropError('');
+
+    try {
+      const parsedCandidates = await runExclusiveExifBatch(async () => {
+        try {
+          const nextParsedCandidates = [];
+
+          for (const [index, file] of acceptedFiles.entries()) {
+            const id = buildCandidateId(file, index);
+
+            try {
+              const recipeSettings = await parseExif(file);
+
+              if (!recipeSettings?.hasColorProfileSettings) {
+                nextParsedCandidates.push({
+                  id,
+                  file,
+                  fileName: file.name,
+                  status: 'invalid',
+                  error: 'No recipe found. Upload straight out of camera JPGs from OM-3, Pen-F, or E-P7 cameras.'
+                });
+                continue;
+              }
+
+              nextParsedCandidates.push({
+                id,
+                file,
+                fileName: file.name,
+                status: 'parsed',
+                recipeSettings,
+                exactFingerprint: computeRecipeFingerprint(recipeSettings)
+              });
+            } catch (error) {
+              console.error(error);
+              nextParsedCandidates.push({
+                id,
+                file,
+                fileName: file.name,
+                status: 'invalid',
+                error: `EXIF read error: ${error?.message || String(error)}`
+              });
+            }
+          }
+
+          return nextParsedCandidates;
+        } finally {
+          // The EXIF parser is shared state. Dispose it once after each serialized
+          // batch so one file does not tear it down under another.
+          await disposeExifTool().catch(() => {});
+        }
+      });
+
+      const rejectedCandidates = fileRejections.map(({ file, errors }, index) => ({
+        id: buildCandidateId(file, acceptedFiles.length + index),
+        file,
+        fileName: file?.name || `rejected-file-${index + 1}`,
+        status: 'invalid',
+        error: buildRejectionError(errors)
+      }));
+
+      const nextCandidates = [...parsedCandidates, ...rejectedCandidates];
+      const grouped = buildUploadSections(nextCandidates, { initialAuthor });
+
+      if (!shouldApplyUploadRequestResult(latestDropRequestRef.current, requestId)) {
         return;
       }
-      setRecipeDetails(recipe);
-      setExifError('');
-      setMissingColorProfile(false);
-    } catch (e) {
-      console.error(e);
-      setRecipeDetails(null);
-      const message = e?.message || String(e);
-      setExifError(`EXIF read error: ${message}`);
-      setMissingColorProfile(false);
+
+      setCandidates(nextCandidates);
+      setSections(grouped.sections);
+      setInvalidFiles(grouped.invalidFiles);
+      setReviewBatchId((currentBatchId) => currentBatchId + 1);
+    } catch (error) {
+      if (!shouldApplyUploadRequestResult(latestDropRequestRef.current, requestId)) {
+        return;
+      }
+
+      console.error(error);
+      clearReview();
+      setDropError(error?.message || 'Failed to prepare upload review.');
     } finally {
-      setIsParsingExif(false);
+      if (shouldApplyUploadRequestResult(latestDropRequestRef.current, requestId)) {
+        setIsParsingFiles(false);
+      }
     }
   };
-
-  const handleRemoveImage = useCallback(() => {
-    setImageFiles([]);
-    setRecipeDetails(null);
-    setExifError("");
-    setIsParsingExif(false);
-    setMatchingRecipe(null);
-    setMatchType(null);
-    setSimilarRecipes([]);
-    setMatchError('');
-    setIsCheckingMatch(false);
-    setUploadStatus('idle');
-    setUploadError('');
-    setUploadedSlug('');
-    setUploadedRecipeUuid('');
-    setUploadPhase('');
-    setLastUploadMode('create');
-    setMissingColorProfile(false);
-  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
       "image/jpeg": ['.jpg', '.jpeg']
     },
-    multiple: false,
+    multiple: true,
     onDrop
   });
 
-  const handleSubmit = async (event, options = {}) => {
-    if (event?.preventDefault) event.preventDefault();
-    const { attachToCommunity = false } = options;
-
-    setUploadStatus('uploading');
-    setUploadPhase('preparing');
-    setUploadError('');
-    setUploadedSlug('');
-    setUploadedRecipeUuid('');
-    setMatchError('');
-    setMatchType(null);
-    setSimilarRecipes([]);
-
-    try {
-      const file = imageFiles[0] || null;
-      if (!file) throw new Error('Missing image file');
-      const prep = await prepareRecipeUploadAction({
-        parameters: {
-          author,
-          name,
-          notes,
-          sourceUrl,
-          imageMeta: { name: file.name, type: file.type, size: file.size },
-          recipeSettings: recipe
-        }
-      });
-
-      if (!prep?.ok) {
-        setUploadStatus('error');
-        setUploadError(prep?.error || 'Upload failed');
-        setUploadPhase('');
-        return;
-      }
-
-      if (!attachToCommunity && !prep.shouldCreateRecipe) {
-        setUploadStatus('idle');
-        setUploadPhase('');
-        setMatchingRecipe((prev) => prev ?? prep.matchedRecipe ?? null);
-        return;
-      }
-
-      // Direct-to-OCI upload via PAR
-      setUploadPhase('direct-upload');
-      const putRes = await fetch(prep.parUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream'
-        },
-        body: file
-      });
-      if (!putRes.ok) {
-        throw new Error(`Direct upload failed: ${putRes.status}`);
-      }
-
-      // Finalize (server verifies object exists + updates DB)
-      setUploadPhase('finalizing');
-      const fin = await finalizeRecipeUploadAction({
-        parameters: {
-          imageId: prep.imageId,
-          originalFileSize: file.size
-        }
-      });
-
-      if (!fin?.ok) {
-        setUploadStatus('error');
-        setUploadError(fin?.error || 'Finalize failed');
-        return;
-      }
-
-      if (prep.shouldCreateRecipe) {
-        setMatchingRecipe(null);
-      } else {
-        setMatchingRecipe(prep.matchedRecipe ?? matchingRecipe);
-      }
-      setLastUploadMode(prep.shouldCreateRecipe ? 'create' : 'attach');
-      setUploadStatus('ok');
-      setUploadedSlug(prep.slug);
-      setUploadedRecipeUuid(prep.recipeUuid || '');
-      setUploadPhase('');
-    } catch (err) {
-      console.error(err);
-      setUploadStatus('error');
-      setUploadError(err?.message || String(err));
-      setUploadPhase('');
-    }
-  };
-
-  useEffect(() => {
-    if (uploadStatus !== 'ok') {
-      hasRedirectedRef.current = false;
-      return;
-    }
-
-    if (hasRedirectedRef.current) return;
-
-    const recipeHref = getRecipePath({
-      slug: matchingRecipe?.slug || uploadedSlug,
-      uuid: matchingRecipe?.uuid || uploadedRecipeUuid
-    });
-
-    if (recipeHref === '/recipes') return;
-
-    hasRedirectedRef.current = true;
-    router.push(recipeHref);
-  }, [uploadStatus, uploadedSlug, uploadedRecipeUuid, matchingRecipe, lastUploadMode, router]);
-
   return (
-    <div>
-      <form className="recipe-upload-form">
-        {hasDroppedImage && uploadStatus === 'ok' && (
-          <div className="mb-3">
-            <Alert type="success">
-              {lastUploadMode === 'attach' ? (() => {
-                const linkHref = getRecipePath({
-                  slug: matchingRecipe?.slug || uploadedSlug,
-                  uuid: matchingRecipe?.uuid || uploadedRecipeUuid
-                });
-                const linkLabel = matchingRecipe?.recipeName || matchingRecipe?.slug || uploadedSlug || 'View recipe';
-                return (
-                  <>
-                    Image attached as a community sample for&nbsp;
-                    <Link href={linkHref}>{linkLabel}</Link>.
-                  </>
-                );
-              })() : (
-                <>
-                  Recipe uploaded!{' '}
-                  {getRecipePath({ slug: uploadedSlug, uuid: uploadedRecipeUuid }) !== '/recipes' ? (
-                    <Link href={getRecipePath({ slug: uploadedSlug, uuid: uploadedRecipeUuid })}>
-                      View recipe
-                    </Link>
-                  ) : null}
-                  {uploadedSlug ? (
-                    <>
-                      {' '}
-                      (slug: <code>{uploadedSlug}</code>)
-                    </>
-                  ) : null}
-                </>
-              )}
-            </Alert>
-          </div>
-        )}
-        {hasDroppedImage && uploadStatus === 'error' && (
-          <div className="mb-3">
-            <Alert type="error">Upload error: {uploadError}</Alert>
-          </div>
-        )}
-        {hasDroppedImage && uploadStatus === 'uploading' && (
-          <div className="mb-3">
-            <Alert>
-              <div className="flex flex-col gap-1">
-                <p className="m-0 text-sm font-medium text-foreground">{uploadProgressMessage.title}</p>
-                <p className="m-0 text-sm leading-6 text-muted-foreground">{uploadProgressMessage.body}</p>
-              </div>
-            </Alert>
-          </div>
-        )}
-        {hasDroppedImage && showFinalizingNotice && (
-          <div className="mb-3">
-            <Alert>
-              Processing the image is taking a bit longer than usual. Hang tight for a bit. It usually finishes within a minute.
-            </Alert>
-          </div>
-        )}
-        <div className="flex flex-wrap items-start gap-6">
-          <div className="flex min-w-[280px] flex-[1_1_360px] flex-col gap-3">
-            <div className="flex w-full flex-col gap-2">
-              <span className="text-sm font-medium text-foreground">Recipe Image</span>
-              <div
-                {...getRootProps()}
-                className={cn(
-                  "flex h-[300px] w-full max-w-[400px] cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border-2 border-dashed px-5 text-center transition-colors",
-                  isDragActive
-                    ? "border-primary/50 bg-primary/8"
-                    : "border-border bg-card/75 hover:border-primary/35 hover:bg-muted/30"
-                )}
-                aria-label="Recipe image uploader"
-              >
-                <input {...getInputProps()} />
-                {isDragActive ? (
-                  <p className="text-sm text-foreground">Drop the image here …</p>
-                ) : (
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    {hasDroppedImage
-                      ? `Selected: ${imageFiles[0].name}`
-                      : "Drag 'n' drop an image here, or click to select one"}
-                  </p>
-                )}
-                {hasDroppedImage && (
-                  <UploadPreviewThumb
-                    fileName={imageFiles[0]?.name || ''}
-                    previewUrl={previewUrl}
-                    disablePreview={disablePreview}
-                    isPreparingPreview={isPreparingPreview}
-                    onRemoveImage={handleRemoveImage}
-                  />
-                )}
-                {isParsingExif && <p className="mt-3 text-sm text-muted-foreground">Reading EXIF…</p>}
-                {!!exifError && (
-                  <p className="mt-2 text-sm text-destructive">
-                    {exifError}
-                  </p>
-                )}
-              </div>
-            </div>
-            {hasDroppedImage && isCheckingMatch && (
-              <p className="text-sm text-muted-foreground">Checking for existing recipes…</p>
-            )}
-            {hasDroppedImage && matchError && (
-              <Alert type="error">{matchError}</Alert>
-            )}
-            {hasDroppedImage && !!omWorkspaceWarning && (
-              <Alert>{omWorkspaceWarning}</Alert>
-            )}
-          </div>
-          {hasDroppedImage && !missingColorProfile && (
-            <Card className="w-full max-w-[420px] border-border/70 bg-card/80">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Upload Details</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-              {matchingRecipe && (
-                <>
-                  <Alert>
-                    {(() => {
-                      const linkHref = getRecipePath(matchingRecipe);
-                      const linkLabel = matchingRecipe.recipeName || matchingRecipe.slug || 'View recipe';
-                      const intro = matchType === 'no-wb'
-                        ? 'A recipe with these settings already exists (white balance differs):'
-                        : matchType === 'color-tone'
-                          ? 'A recipe with the same color wheel and tone adjustments already exists (sliders or white balance differ):'
-                          : 'Exact match — this recipe already exists:';
-                      return (
-                        <>
-                          {intro}&nbsp;
-                          <Link href={linkHref}>
-                            {linkLabel}
-                          </Link>
-                          {matchingRecipe.authorName ? ` by ${matchingRecipe.authorName}` : ''}.
-                        </>
-                      );
-                    })()}
-                  </Alert>
-                  {matchType === 'full' && (
-                    <>
-                      <p className="m-0 text-sm leading-6 text-muted-foreground">
-                        Continue below to attach your image as a community sample or choose a different photo.
-                      </p>
-                      <div className="flex flex-wrap gap-3">
-                        <Button
-                          onClick={(event) => handleSubmit(event, { attachToCommunity: true })}
-                          disabled={
-                            uploadStatus === 'uploading' ||
-                            isParsingExif ||
-                            !recipe ||
-                            !imageFiles?.length
-                          }
-                        >
-                          {uploadStatus === 'uploading'
-                            ? (uploadPhase === 'preparing'
-                                ? 'Preparing…'
-                                : uploadPhase === 'direct-upload'
-                                  ? 'Uploading to storage…'
-                                : uploadPhase === 'finalizing'
-                                    ? 'Finalizing…'
-                                    : 'Uploading…')
-                            : 'Attach as community sample'}
-                        </Button>
-                        <button
-                          type="button"
-                          className={buttonVariants({ variant: 'outline' })}
-                          onClick={handleRemoveImage}
-                          disabled={uploadStatus === 'uploading'}
-                        >
-                          Choose different image
-                        </button>
-                      </div>
-                    </>
-                  )}
-                  {(matchType === 'no-wb' || matchType === 'color-tone') && (
-                    <button
-                      type="button"
-                      className={buttonVariants({ variant: 'outline', className: 'self-start' })}
-                      onClick={handleRemoveImage}
-                    >
-                      Choose different image
-                    </button>
-                  )}
-                </>
-              )}
-              {!matchingRecipe && similarRecipes.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {similarRecipes.map(({ type, recipe, label }) => {
-                    const linkHref = getRecipePath(recipe);
-                    const linkLabel = recipe.recipeName || recipe.slug || 'View recipe';
-                    if (type === 'color') {
-                      return (
-                        <Alert key={type}>
-                          Another recipe has exactly the same color settings but different tone curve. Are you sure you want to create a new recipe?
+    <div className="flex flex-col gap-6">
+      {dropError && (
+        <Alert type="error">Upload review error: {dropError}</Alert>
+      )}
 
-                          <Link href={linkHref}>{linkLabel}</Link>
-                          {recipe.authorName ? ` by ${recipe.authorName}` : ''}
-                        </Alert>
-                      );
-                    }
-                    return (
-                      <Alert key={type}>
-                        {label}:{' '}
-                        <Link href={linkHref}>{linkLabel}</Link>
-                        {recipe.authorName ? ` by ${recipe.authorName}` : ''}.
-                      </Alert>
-                    );
-                  })}
-                </div>
-              )}
-              {!matchingRecipe && (
-                <>
-                  <label className="flex w-full flex-col gap-2">
-                    <span className="text-sm font-medium text-foreground">Author Name</span>
-                    <Input
-                      type="text"
-                      value={author}
-                      onChange={(e) => setAuthor(e.target.value)}
-                      required
-                      placeholder="Author Name"
-                    />
-                  </label>
-                  <label className="flex w-full flex-col gap-2">
-                    <span className="text-sm font-medium text-foreground">Recipe Name</span>
-                    <Input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                      placeholder="Recipe Name"
-                    />
-                  </label>
-                  <label className="flex w-full flex-col gap-2">
-                    <span className="text-sm font-medium text-foreground">Notes</span>
-                    <Textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Enter any notes"
-                      rows={3}
-                    />
-                  </label>
-                  <label className="flex w-full flex-col gap-2">
-                    <span className="text-sm font-medium text-foreground">Source Link</span>
-                    <Input
-                      type="url"
-                      value={sourceUrl}
-                      onChange={(e) => setSourceUrl(e.target.value)}
-                      placeholder="https://example.com/original-recipe"
-                    />
-                  </label>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={
-                      uploadStatus === 'uploading' ||
-                      isParsingExif ||
-                      !recipe ||
-                      !imageFiles?.length
-                    }
-                  >
-                    {uploadStatus === 'uploading'
-                      ? (uploadPhase === 'preparing'
-                          ? 'Preparing…'
-                          : uploadPhase === 'direct-upload'
-                            ? 'Uploading to storage…'
-                            : uploadPhase === 'finalizing'
-                              ? 'Finalizing…'
-                              : 'Uploading…')
-                      : 'Upload'}
-                  </Button>
-                </>
-              )}
-              </CardContent>
-            </Card>
+      <Card className="border-border/70 bg-card/75">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Recipe Image Review</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div
+            {...getRootProps()}
+            className={cn(
+              "flex min-h-[260px] w-full cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border-2 border-dashed px-5 py-8 text-center transition-colors",
+              isDragActive
+                ? "border-primary/50 bg-primary/8"
+                : "border-border bg-card/75 hover:border-primary/35 hover:bg-muted/30"
+            )}
+            aria-label="Recipe image uploader"
+          >
+            <input {...getInputProps()} />
+            {isDragActive ? (
+              <p className="text-sm text-foreground">Drop the images here ...</p>
+            ) : (
+              <div className="flex max-w-[420px] flex-col gap-2">
+                <p className="m-0 text-sm font-medium text-foreground">
+                  Drag and drop one or more JPGs here, or click to select them.
+                </p>
+                <p className="m-0 text-sm leading-6 text-muted-foreground">
+                  The page will group images with identical detected recipe settings into shared review sections.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {isParsingFiles && (
+            <Alert>
+              Reading EXIF metadata and grouping matching files for review...
+            </Alert>
           )}
+
+          {hasReviewState && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="m-0 text-sm leading-6 text-muted-foreground">
+                {sections.length} review section{sections.length === 1 ? '' : 's'} from {parsedImageCount} valid image{parsedImageCount === 1 ? '' : 's'}.
+                {invalidFiles.length > 0 ? ` ${invalidFiles.length} invalid file${invalidFiles.length === 1 ? '' : 's'} listed separately.` : ''}
+              </p>
+              <Button type="button" variant="outline" onClick={clearReview}>
+                Choose different files
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <InvalidUploadFilesCard invalidFiles={invalidFiles} />
+
+      {sections.length > 0 ? (
+        <div className="grid gap-6">
+          {sections.map((section) => {
+            const sectionFiles = candidates
+              .filter((candidate) => section.fileIds.includes(candidate.id))
+              .map((candidate) => candidate.file)
+              .filter(Boolean);
+
+            return (
+              <RecipeUploadSection
+                key={buildSectionRenderKey(reviewBatchId, section.id)}
+                section={section}
+                files={sectionFiles}
+              />
+            );
+          })}
         </div>
-        {hasDroppedImage && recipe && <DetectedRecipeSettingsCard recipe={recipe} />}
-      </form>
+      ) : (
+        hasReviewState && !isParsingFiles && (
+          <Alert>
+            No valid recipe sections were detected from this batch.
+          </Alert>
+        )
+      )}
     </div>
   );
 }

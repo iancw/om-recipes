@@ -1,24 +1,28 @@
 'use client';
 
 import React, { memo, useEffect, useState } from 'react';
+import Link from 'next/link';
 
 import { Alert } from 'components/alert';
 import { Button } from 'components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from 'components/ui/card';
 import { Input } from 'components/ui/input';
 import { Textarea } from 'components/ui/textarea';
+import { getRecipePath } from 'lib/recipe-url.js';
 import { createUploadPreviewUrl, shouldDisableUploadPreview } from 'lib/upload-preview.js';
 
 import DetectedRecipeSettingsCard from './DetectedRecipeSettingsCard';
 import { areSectionPreviewPropsEqual } from './render-boundaries.js';
 import { submitUploadSection } from './submit-upload-section.js';
 
-function SectionPreview({
+export function SectionPreview({
     recipeId,
     fileNames,
     previewUrls,
     disablePreview,
-    isPreparingPreview
+    isPreparingPreview,
+    removeDisabled,
+    onRemoveImageAtIndex
 }) {
     if (!fileNames.length) return null;
 
@@ -39,7 +43,7 @@ function SectionPreview({
                             key={`${recipeId}-${fileName}-${index}`}
                             className="flex w-[124px] flex-col gap-2"
                         >
-                            <div className="flex h-[124px] items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-muted/20">
+                            <div className="relative flex h-[124px] items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-muted/20">
                                 {disablePreview ? (
                                     <p className="px-3 text-center text-xs leading-5 text-muted-foreground">
                                         Preview disabled on this device.
@@ -59,10 +63,28 @@ function SectionPreview({
                                         Preview unavailable.
                                     </p>
                                 )}
+                                <button
+                                    type="button"
+                                    aria-label={`Remove image ${fileName}`}
+                                    title={`Remove image ${fileName}`}
+                                    onClick={() => onRemoveImageAtIndex(index)}
+                                    disabled={removeDisabled}
+                                    className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card/95 text-sm leading-none shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    ×
+                                </button>
                             </div>
                             <p className="m-0 break-all text-xs leading-5 text-muted-foreground">
                                 {fileName}
                             </p>
+                            <button
+                                type="button"
+                                onClick={() => onRemoveImageAtIndex(index)}
+                                disabled={removeDisabled}
+                                className="text-left text-xs font-medium text-foreground underline underline-offset-4 disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+                            >
+                                Remove image
+                            </button>
                         </div>
                     );
                 })}
@@ -85,7 +107,7 @@ export function getSectionFieldValidation(mode) {
         };
 }
 
-function SectionFormFields({
+export function SectionFormFields({
     author,
     name,
     notes,
@@ -101,54 +123,59 @@ function SectionFormFields({
     onSubmit
 }) {
     const fieldValidation = getSectionFieldValidation(mode);
+    const showCreationFields = mode !== 'attach';
 
     return (
         <form
             className="recipe-upload-form flex flex-col gap-4"
             onSubmit={onSubmit}
         >
-            <label className="flex w-full flex-col gap-2">
-                <span className="text-sm font-medium text-foreground">Author Name</span>
-                <Input
-                    type="text"
-                    value={author}
-                    onChange={(event) => onAuthorChange(event.target.value)}
-                    required
-                    disabled={disabled}
-                    placeholder="Author Name"
-                />
-            </label>
-            <label className="flex w-full flex-col gap-2">
-                <span className="text-sm font-medium text-foreground">Recipe Name</span>
-                <Input
-                    type="text"
-                    value={name}
-                    onChange={(event) => onNameChange(event.target.value)}
-                    required={fieldValidation.nameRequired}
-                    disabled={disabled}
-                    placeholder="Recipe Name"
-                />
-            </label>
-            <label className="flex w-full flex-col gap-2">
-                <span className="text-sm font-medium text-foreground">Notes</span>
-                <Textarea
-                    value={notes}
-                    onChange={(event) => onNotesChange(event.target.value)}
-                    placeholder="Enter any notes"
-                    rows={3}
-                    disabled={disabled}
-                />
-            </label>
-            <label className="flex w-full flex-col gap-2">
-                <span className="text-sm font-medium text-foreground">Source Link</span>
-                <Input
-                    type={fieldValidation.sourceUrlInputType}
-                    value={sourceUrl}
-                    onChange={(event) => onSourceUrlChange(event.target.value)}
-                    disabled={disabled}
-                    placeholder="https://example.com/original-recipe"
-                />
-            </label>
+            {showCreationFields && (
+                <>
+                    <label className="flex w-full flex-col gap-2">
+                        <span className="text-sm font-medium text-foreground">Author Name</span>
+                        <Input
+                            type="text"
+                            value={author}
+                            onChange={(event) => onAuthorChange(event.target.value)}
+                            required
+                            disabled={disabled}
+                            placeholder="Author Name"
+                        />
+                    </label>
+                    <label className="flex w-full flex-col gap-2">
+                        <span className="text-sm font-medium text-foreground">Recipe Name</span>
+                        <Input
+                            type="text"
+                            value={name}
+                            onChange={(event) => onNameChange(event.target.value)}
+                            required={fieldValidation.nameRequired}
+                            disabled={disabled}
+                            placeholder="Recipe Name"
+                        />
+                    </label>
+                    <label className="flex w-full flex-col gap-2">
+                        <span className="text-sm font-medium text-foreground">Notes</span>
+                        <Textarea
+                            value={notes}
+                            onChange={(event) => onNotesChange(event.target.value)}
+                            placeholder="Enter any notes"
+                            rows={3}
+                            disabled={disabled}
+                        />
+                    </label>
+                    <label className="flex w-full flex-col gap-2">
+                        <span className="text-sm font-medium text-foreground">Source Link</span>
+                        <Input
+                            type={fieldValidation.sourceUrlInputType}
+                            value={sourceUrl}
+                            onChange={(event) => onSourceUrlChange(event.target.value)}
+                            disabled={disabled}
+                            placeholder="https://example.com/original-recipe"
+                        />
+                    </label>
+                </>
+            )}
             <Button type="submit" disabled={isSubmitDisabled}>
                 {buttonLabel}
             </Button>
@@ -178,6 +205,18 @@ export function getVisiblePreviewUrls({ previewUrls, resolvedPreviewBatchKey, pr
     return Array.isArray(previewUrls) ? previewUrls : [];
 }
 
+export function shouldShowSectionForm(submitState) {
+    return submitState !== 'ok';
+}
+
+export function removePendingFileAtIndex(files, indexToRemove) {
+    if (!Array.isArray(files) || files.length === 0) {
+        return [];
+    }
+
+    return files.filter((_, index) => index !== indexToRemove);
+}
+
 function getSubmitButtonLabel({ fileCount, matchState, mode, submitState }) {
     if (submitState === 'uploading') return 'Uploading section...';
     if (submitState === 'ok') return 'Section uploaded';
@@ -199,6 +238,34 @@ export function buildSuccessSummary({ result, matchedRecipe, recipeName }) {
         : matchedRecipe;
     const matchedRecipeName = summaryRecipe?.recipeName ? `"${summaryRecipe.recipeName}"` : 'the existing recipe';
     return `Attached ${uploadedLabel} to ${matchedRecipeName}.`;
+}
+
+export function buildSuccessRecipeLink({ result, matchedRecipe }) {
+    const recipe = result?.createdRecipe ?? result?.matchedRecipe ?? matchedRecipe;
+    const href = getRecipePath(recipe);
+
+    if (!recipe || href === '/recipes') {
+        return null;
+    }
+
+    return {
+        href,
+        label: 'View recipe'
+    };
+}
+
+export function buildUploadProgressSummary({ currentFileIndex, totalFiles, fileName }) {
+    const safeFileName = String(fileName || '').trim();
+
+    if ((Number(totalFiles) || 0) <= 1) {
+        return safeFileName ? `Uploading image: ${safeFileName}` : 'Uploading image...';
+    }
+
+    const current = Math.max(1, Number(currentFileIndex) || 1);
+    const total = Math.max(current, Number(totalFiles) || current);
+    return safeFileName
+        ? `Uploading image ${current} of ${total}: ${safeFileName}`
+        : `Uploading image ${current} of ${total}...`;
 }
 
 function buildErrorSummary(result) {
@@ -316,6 +383,9 @@ export default function RecipeUploadSection({ section, files = [] }) {
     const [submitState, setSubmitState] = useState('idle');
     const [submitSummary, setSubmitSummary] = useState('');
     const [submitError, setSubmitError] = useState('');
+    const [successRecipe, setSuccessRecipe] = useState(null);
+    const [uploadProgress, setUploadProgress] = useState(null);
+    const [isDismissed, setIsDismissed] = useState(false);
     const previewBatchKey = buildPreviewBatchKey(pendingFiles);
     const visiblePreviewUrls = getVisiblePreviewUrls({
         previewUrls,
@@ -338,6 +408,8 @@ export default function RecipeUploadSection({ section, files = [] }) {
         let nextPreviewUrls = [];
 
         if (!pendingFiles.length || disablePreview) {
+            setPreviewUrls([]);
+            setResolvedPreviewBatchKey(previewBatchKey);
             return undefined;
         }
 
@@ -424,12 +496,48 @@ export default function RecipeUploadSection({ section, files = [] }) {
         : '';
     const isSubmitDisabled = submitState === 'uploading' || submitState === 'ok' || matchState !== 'ready' || fileCount === 0;
     const isFormDisabled = submitState === 'uploading' || submitState === 'ok';
+    const removeDisabled = submitState === 'uploading' || submitState === 'ok';
     const submitButtonLabel = getSubmitButtonLabel({
         fileCount,
         matchState,
         mode,
         submitState
     });
+
+    const handleDismissSection = () => {
+        if (removeDisabled) {
+            return;
+        }
+
+        setPendingFiles([]);
+        setPreviewUrls([]);
+        setResolvedPreviewBatchKey('empty');
+        setSubmitError('');
+        setSubmitSummary('');
+        setSuccessRecipe(null);
+        setUploadProgress(null);
+        setIsDismissed(true);
+    };
+
+    const handleRemoveImageAtIndex = (indexToRemove) => {
+        if (removeDisabled) {
+            return;
+        }
+
+        setPendingFiles((currentFiles) => {
+            const nextFiles = removePendingFileAtIndex(currentFiles, indexToRemove);
+            if (nextFiles.length === 0) {
+                setPreviewUrls([]);
+                setResolvedPreviewBatchKey('empty');
+                setSubmitError('');
+                setSubmitSummary('');
+                setSuccessRecipe(null);
+                setUploadProgress(null);
+                setIsDismissed(true);
+            }
+            return nextFiles;
+        });
+    };
 
     const handleSubmit = async (event) => {
         event.preventDefault();
@@ -441,6 +549,8 @@ export default function RecipeUploadSection({ section, files = [] }) {
         setSubmitState('uploading');
         setSubmitSummary('');
         setSubmitError('');
+        setSuccessRecipe(null);
+        setUploadProgress(null);
 
         const result = await submitUploadSection({
             section: {
@@ -457,7 +567,8 @@ export default function RecipeUploadSection({ section, files = [] }) {
             },
             prepare: prepareSectionUpload,
             directUpload: directUploadToPar,
-            finalize: finalizeSectionUpload
+            finalize: finalizeSectionUpload,
+            onProgress: setUploadProgress
         });
 
         if (result.ok) {
@@ -469,6 +580,8 @@ export default function RecipeUploadSection({ section, files = [] }) {
                     recipeName: name.trim() || section?.form?.name || 'New recipe'
                 })
             );
+            setSuccessRecipe(result.createdRecipe ?? result.matchedRecipe ?? matchedRecipe ?? null);
+            setUploadProgress(null);
             return;
         }
 
@@ -485,12 +598,26 @@ export default function RecipeUploadSection({ section, files = [] }) {
         setPendingFiles((currentFiles) => trimUploadedFilesAfterFailure(currentFiles, result.uploadedCount));
         setSubmitState('error');
         setSubmitError(buildErrorSummary(result));
+        setSuccessRecipe(null);
+        setUploadProgress(null);
     };
+
+    if (isDismissed) {
+        return null;
+    }
 
     return (
         <Card className="w-full border-border/70 bg-card/80">
-            <CardHeader className="pb-3">
+            <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
                 <CardTitle className="text-lg">{sectionTitle}</CardTitle>
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleDismissSection}
+                    disabled={removeDisabled}
+                >
+                    Dismiss section
+                </Button>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
                 {!!omWorkspaceWarning && <Alert>{omWorkspaceWarning}</Alert>}
@@ -500,6 +627,8 @@ export default function RecipeUploadSection({ section, files = [] }) {
                     previewUrls={visiblePreviewUrls}
                     disablePreview={disablePreview}
                     isPreparingPreview={isPreparingPreview}
+                    removeDisabled={removeDisabled}
+                    onRemoveImageAtIndex={handleRemoveImageAtIndex}
                 />
                 <DetectedRecipeSettingsCard recipe={section?.recipeSettings || null} />
                 {matchState === 'loading' && (
@@ -527,26 +656,40 @@ export default function RecipeUploadSection({ section, files = [] }) {
                         {submitSummary}
                     </Alert>
                 )}
+                {submitState === 'ok' && buildSuccessRecipeLink({ result: { createdRecipe: successRecipe }, matchedRecipe }) && (
+                    <Button asChild>
+                        <Link href={buildSuccessRecipeLink({ result: { createdRecipe: successRecipe }, matchedRecipe }).href}>
+                            {buildSuccessRecipeLink({ result: { createdRecipe: successRecipe }, matchedRecipe }).label}
+                        </Link>
+                    </Button>
+                )}
                 {submitError && (
                     <Alert type="error">
                         {submitError}
                     </Alert>
                 )}
-                <SectionFormFields
-                    author={author}
-                    name={name}
-                    notes={notes}
-                    sourceUrl={sourceUrl}
-                    mode={mode}
-                    disabled={isFormDisabled}
-                    buttonLabel={submitButtonLabel}
-                    isSubmitDisabled={isSubmitDisabled}
-                    onAuthorChange={setAuthor}
-                    onNameChange={setName}
-                    onNotesChange={setNotes}
-                    onSourceUrlChange={setSourceUrl}
-                    onSubmit={handleSubmit}
-                />
+                {submitState === 'uploading' && uploadProgress && (
+                    <Alert>
+                        {buildUploadProgressSummary(uploadProgress)}
+                    </Alert>
+                )}
+                {shouldShowSectionForm(submitState) && (
+                    <SectionFormFields
+                        author={author}
+                        name={name}
+                        notes={notes}
+                        sourceUrl={sourceUrl}
+                        mode={mode}
+                        disabled={isFormDisabled}
+                        buttonLabel={submitButtonLabel}
+                        isSubmitDisabled={isSubmitDisabled}
+                        onAuthorChange={setAuthor}
+                        onNameChange={setName}
+                        onNotesChange={setNotes}
+                        onSourceUrlChange={setSourceUrl}
+                        onSubmit={handleSubmit}
+                    />
+                )}
             </CardContent>
         </Card>
     );

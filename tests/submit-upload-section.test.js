@@ -346,4 +346,54 @@ describe('submitUploadSection', () => {
             })
         );
     });
+
+    it('reports per-file upload progress while working through a section', async () => {
+        const prepare = vi.fn()
+            .mockResolvedValueOnce({
+                ok: true,
+                shouldCreateRecipe: true,
+                imageId: 10,
+                parUrl: 'https://upload/1',
+                recipeId: 77,
+                slug: 'recipe-a',
+                recipeUuid: 'uuid-a'
+            })
+            .mockResolvedValueOnce({
+                ok: true,
+                shouldCreateRecipe: false,
+                imageId: 11,
+                parUrl: 'https://upload/2',
+                matchedRecipe: { slug: 'recipe-a', uuid: 'uuid-a' }
+            });
+        const directUpload = vi.fn().mockResolvedValue({ ok: true });
+        const finalize = vi.fn().mockResolvedValue({ ok: true });
+        const onProgress = vi.fn();
+
+        await submitUploadSection({
+            section: {
+                mode: 'create',
+                form: { author: 'Ian', name: 'Recipe A', notes: '', sourceUrl: '' },
+                recipeSettings: { yellow: 1 },
+                files: [
+                    { name: 'first.jpg', type: 'image/jpeg', size: 10 },
+                    { name: 'second.jpg', type: 'image/jpeg', size: 20 }
+                ]
+            },
+            prepare,
+            directUpload,
+            finalize,
+            onProgress
+        });
+
+        expect(onProgress).toHaveBeenNthCalledWith(1, {
+            currentFileIndex: 1,
+            totalFiles: 2,
+            fileName: 'first.jpg'
+        });
+        expect(onProgress).toHaveBeenNthCalledWith(2, {
+            currentFileIndex: 2,
+            totalFiles: 2,
+            fileName: 'second.jpg'
+        });
+    });
 });

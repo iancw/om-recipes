@@ -29,7 +29,8 @@ export function areSectionPreviewPropsEqual(prevProps, nextProps) {
         && areArraysEqual(prevProps.fileNames, nextProps.fileNames)
         && areArraysEqual(prevProps.previewUrls, nextProps.previewUrls)
         && prevProps.disablePreview === nextProps.disablePreview
-        && prevProps.isPreparingPreview === nextProps.isPreparingPreview;
+        && prevProps.isPreparingPreview === nextProps.isPreparingPreview
+        && prevProps.removeDisabled === nextProps.removeDisabled;
 }
 
 export function areSectionFormPropsEqual(prevProps, nextProps) {

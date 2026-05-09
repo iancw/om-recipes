@@ -5,11 +5,14 @@ import {
     shouldApplyUploadRequestResult
 } from '../app/upload/RecipeUpload.jsx';
 import {
+    buildSuccessRecipeLink,
+    buildUploadProgressSummary,
     buildSuccessSummary,
     buildRetryAttachState,
     buildMatchCheckFailureState,
     getSectionFieldValidation,
     getVisiblePreviewUrls,
+    shouldShowSectionForm,
     trimUploadedFilesAfterFailure
 } from '../app/upload/RecipeUploadSection.jsx';
 import {
@@ -301,5 +304,47 @@ describe('upload render boundaries', () => {
             nameRequired: true,
             sourceUrlInputType: 'url'
         });
+    });
+
+    it('hides the section form after a successful upload', () => {
+        expect(shouldShowSectionForm('idle')).toBe(true);
+        expect(shouldShowSectionForm('uploading')).toBe(true);
+        expect(shouldShowSectionForm('error')).toBe(true);
+        expect(shouldShowSectionForm('ok')).toBe(false);
+    });
+
+    it('builds a created recipe link from the authoritative success result', () => {
+        expect(
+            buildSuccessRecipeLink({
+                result: {
+                    createdRecipe: {
+                        slug: 'new-recipe',
+                        uuid: 'recipe-uuid-4',
+                        recipeName: 'New Recipe'
+                    }
+                },
+                matchedRecipe: null
+            })
+        ).toEqual({
+            href: '/recipes/new-recipe',
+            label: 'View recipe'
+        });
+    });
+
+    it('builds upload progress summaries with file counts for multi-image uploads', () => {
+        expect(
+            buildUploadProgressSummary({
+                currentFileIndex: 2,
+                totalFiles: 5,
+                fileName: 'second.jpg'
+            })
+        ).toBe('Uploading image 2 of 5: second.jpg');
+        expect(
+            buildUploadProgressSummary({
+                currentFileIndex: 1,
+                totalFiles: 1,
+                fileName: 'only.jpg'
+            })
+        ).toBe('Uploading image: only.jpg');
     });
 });

@@ -108,12 +108,18 @@ async function uploadOneFile({ file, section, prepare, directUpload, finalize, m
     return { ok: true, prep, fin };
 }
 
-export async function submitUploadSection({ section, prepare, directUpload, finalize }) {
+export async function submitUploadSection({ section, prepare, directUpload, finalize, onProgress }) {
     const successes = [];
     let createdRecipe = null;
     let matchedRecipe = section.matchedRecipe ?? null;
 
-    for (const file of section.files) {
+    for (const [index, file] of section.files.entries()) {
+        onProgress?.({
+            currentFileIndex: index + 1,
+            totalFiles: section.files.length,
+            fileName: file.name
+        });
+
         const result = await uploadOneFile({
             file,
             section,

@@ -62,7 +62,7 @@ describe('submitUploadSection', () => {
     });
 
     it('attaches every image when the section already matches an existing recipe', async () => {
-        const matchedRecipe = { id: 77, slug: 'recipe-a', uuid: 'uuid-a' };
+        const matchedRecipe = { id: 77, slug: 'recipe-a', uuid: 'uuid-a', recipeName: 'Recipe A', authorName: 'Ian' };
         const prepare = vi.fn().mockImplementation(async ({ matchedRecipe: prepareMatchedRecipe }) => ({
             ok: true,
             shouldCreateRecipe: false,
@@ -104,7 +104,7 @@ describe('submitUploadSection', () => {
         expect(result).toEqual({
             ok: true,
             createdRecipe: null,
-            matchedRecipe: { slug: 'recipe-a', uuid: 'uuid-a' },
+            matchedRecipe: { slug: 'recipe-a', uuid: 'uuid-a', recipeName: 'Recipe A', authorName: 'Ian' },
             uploadedCount: 2
             ,
             failedFile: null,
@@ -219,5 +219,131 @@ describe('submitUploadSection', () => {
             createdRecipe: { slug: 'recipe-a', uuid: 'uuid-a' },
             matchedRecipe: { slug: 'recipe-a', uuid: 'uuid-a' }
         });
+    });
+
+    it('propagates structured attach-target errors from prepare failures', async () => {
+        const prepare = vi.fn().mockResolvedValue({
+            ok: false,
+            error: 'Matched recipe was not found',
+            errorCode: 'matched_recipe_not_found',
+            status: 404
+        });
+        const directUpload = vi.fn();
+        const finalize = vi.fn();
+
+        const result = await submitUploadSection({
+            section: {
+                mode: 'attach',
+                matchedRecipe: { slug: 'stale-recipe', uuid: 'stale-uuid', recipeName: 'Stale Recipe' },
+                form: { author: 'Ian', name: 'Recipe A', notes: '', sourceUrl: '' },
+                recipeSettings: { yellow: 1 },
+                files: [
+                    { name: 'first.jpg', type: 'image/jpeg', size: 10 }
+                ]
+            },
+            prepare,
+            directUpload,
+            finalize
+        });
+
+        expect(directUpload).not.toHaveBeenCalled();
+        expect(finalize).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            ok: false,
+            uploadedCount: 0,
+            failedFile: 'first.jpg',
+            failedStage: 'prepare',
+            error: 'Matched recipe was not found',
+            errorCode: 'matched_recipe_not_found',
+            status: 404,
+            createdRecipe: null,
+            matchedRecipe: { slug: 'stale-recipe', uuid: 'stale-uuid', recipeName: 'Stale Recipe' }
+        });
+    });
+
+    it('prefers the canonical matched recipe returned from prepare when the first attach upload fails', async () => {
+        const prepare = vi.fn().mockResolvedValue({
+            ok: true,
+            shouldCreateRecipe: false,
+            imageId: 10,
+            parUrl: 'https://upload/1',
+            matchedRecipe: {
+                slug: 'canonical-recipe',
+                uuid: 'shared-uuid',
+                recipeName: 'Canonical Recipe',
+                authorName: 'Ian'
+            }
+        });
+        const directUpload = vi.fn().mockResolvedValue({ ok: false, error: 'PAR expired' });
+        const finalize = vi.fn();
+
+        const result = await submitUploadSection({
+            section: {
+                mode: 'attach',
+                matchedRecipe: {
+                    slug: 'stale-recipe',
+                    uuid: 'shared-uuid',
+                    recipeName: 'Stale Recipe'
+                },
+                form: { author: 'Ian', name: 'Recipe A', notes: '', sourceUrl: '' },
+                recipeSettings: { yellow: 1 },
+                files: [
+                    { name: 'first.jpg', type: 'image/jpeg', size: 10 }
+                ]
+            },
+            prepare,
+            directUpload,
+            finalize
+        });
+
+        expect(finalize).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            ok: false,
+            uploadedCount: 0,
+            failedFile: 'first.jpg',
+            failedStage: 'direct-upload',
+            error: 'PAR expired',
+            createdRecipe: null,
+            matchedRecipe: {
+                slug: 'canonical-recipe',
+                uuid: 'shared-uuid',
+                recipeName: 'Canonical Recipe',
+                authorName: 'Ian'
+            }
+        });
+    });
+
+    it('does not pass a skip-existing-match bypass to prepare', async () => {
+        const prepare = vi.fn().mockResolvedValue({
+            ok: true,
+            shouldCreateRecipe: true,
+            imageId: 10,
+            parUrl: 'https://upload/1',
+            recipeId: 77,
+            slug: 'recipe-a',
+            recipeUuid: 'uuid-a'
+        });
+        const directUpload = vi.fn().mockResolvedValue({ ok: true });
+        const finalize = vi.fn().mockResolvedValue({ ok: true });
+
+        await submitUploadSection({
+            section: {
+                mode: 'create',
+                form: { author: 'Ian', name: 'Recipe A', notes: '', sourceUrl: '' },
+                recipeSettings: { yellow: 1 },
+                files: [
+                    { name: 'first.jpg', type: 'image/jpeg', size: 10 }
+                ]
+            },
+            prepare,
+            directUpload,
+            finalize
+        });
+
+        expect(prepare).toHaveBeenCalledWith(
+            expect.not.objectContaining({
+                skipExistingRecipeMatch: true
+            })
+        );
     });
 });

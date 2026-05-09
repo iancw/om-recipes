@@ -17,7 +17,12 @@ function normalizeRecipeIdentity(recipe) {
 
     if (!slug || !uuid) return null;
 
-    return { slug, uuid };
+    return {
+        slug,
+        uuid,
+        ...(recipe?.recipeName ? { recipeName: recipe.recipeName } : {}),
+        ...(recipe?.authorName ? { authorName: recipe.authorName } : {})
+    };
 }
 
 function recipeContextFromPrepare(prep) {
@@ -29,7 +34,9 @@ function recipeContextFromPrepare(prep) {
     return {
         id: prep?.recipeId ?? null,
         slug,
-        uuid
+        uuid,
+        ...(prep?.recipeName ? { recipeName: prep.recipeName } : {}),
+        ...(prep?.authorName ? { authorName: prep.authorName } : {})
     };
 }
 
@@ -44,7 +51,13 @@ async function uploadOneFile({ file, section, prepare, directUpload, finalize, m
     }
 
     if (!prep?.ok) {
-        return { ok: false, stage: 'prepare', error: prep?.error || 'Prepare failed' };
+        return {
+            ok: false,
+            stage: 'prepare',
+            error: prep?.error || 'Prepare failed',
+            ...(prep?.errorCode ? { errorCode: prep.errorCode } : {}),
+            ...(prep?.status != null ? { status: prep.status } : {})
+        };
     }
 
     try {
@@ -54,11 +67,20 @@ async function uploadOneFile({ file, section, prepare, directUpload, finalize, m
                 ok: false,
                 stage: 'direct-upload',
                 error: uploadResult?.error || 'Direct upload failed',
+                ...(uploadResult?.errorCode ? { errorCode: uploadResult.errorCode } : {}),
+                ...(uploadResult?.status != null ? { status: uploadResult.status } : {}),
                 prep
             };
         }
     } catch (error) {
-        return { ok: false, stage: 'direct-upload', error: error?.message || String(error), prep };
+        return {
+            ok: false,
+            stage: 'direct-upload',
+            error: error?.message || String(error),
+            ...(error?.errorCode ? { errorCode: error.errorCode } : {}),
+            ...(error?.status != null ? { status: error.status } : {}),
+            prep
+        };
     }
 
     let fin;
@@ -73,7 +95,14 @@ async function uploadOneFile({ file, section, prepare, directUpload, finalize, m
     }
 
     if (!fin?.ok) {
-        return { ok: false, stage: 'finalize', error: fin?.error || 'Finalize failed', prep };
+        return {
+            ok: false,
+            stage: 'finalize',
+            error: fin?.error || 'Finalize failed',
+            ...(fin?.errorCode ? { errorCode: fin.errorCode } : {}),
+            ...(fin?.status != null ? { status: fin.status } : {}),
+            prep
+        };
     }
 
     return { ok: true, prep, fin };
@@ -96,7 +125,9 @@ export async function submitUploadSection({ section, prepare, directUpload, fina
 
         if (!result.ok) {
             const failedCreatedRecipe = result.prep?.shouldCreateRecipe ? normalizeRecipeIdentity(result.prep) : null;
-            const failedMatchedRecipe = failedCreatedRecipe ?? normalizeRecipeIdentity(matchedRecipe);
+            const failedMatchedRecipe = failedCreatedRecipe
+                ?? normalizeRecipeIdentity(result.prep?.matchedRecipe)
+                ?? normalizeRecipeIdentity(matchedRecipe);
 
             return {
                 ok: false,
@@ -104,6 +135,8 @@ export async function submitUploadSection({ section, prepare, directUpload, fina
                 failedFile: file.name,
                 failedStage: result.stage,
                 error: result.error,
+                ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+                ...(result.status != null ? { status: result.status } : {}),
                 createdRecipe: createdRecipe ?? failedCreatedRecipe,
                 matchedRecipe: failedMatchedRecipe
             };

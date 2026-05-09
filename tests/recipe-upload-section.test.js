@@ -24,7 +24,7 @@ describe('RecipeUploadSection', () => {
 
         expect(markup).toContain('aria-label="Remove image one.jpg"');
         expect(markup).toContain('aria-label="Remove image two.jpg"');
-        expect(markup).toContain('>Remove image<');
+        expect(markup).not.toContain('>Remove image<');
     });
 
     it('removes the targeted file from a section', () => {

@@ -77,14 +77,6 @@ export function SectionPreview({
                             <p className="m-0 break-all text-xs leading-5 text-muted-foreground">
                                 {fileName}
                             </p>
-                            <button
-                                type="button"
-                                onClick={() => onRemoveImageAtIndex(index)}
-                                disabled={removeDisabled}
-                                className="text-left text-xs font-medium text-foreground underline underline-offset-4 disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
-                            >
-                                Remove image
-                            </button>
                         </div>
                     );
                 })}

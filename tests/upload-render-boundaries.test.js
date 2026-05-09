@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    runExclusiveExifBatch,
+    shouldApplyUploadRequestResult
+} from '../app/upload/RecipeUpload.jsx';
+import {
     areDetectedRecipeSettingsPropsEqual,
     areSectionFormPropsEqual,
     areSectionPreviewPropsEqual,
+    buildSectionRenderKey,
     areUploadPreviewPropsEqual
 } from '../app/upload/render-boundaries.js';
 
@@ -96,5 +101,46 @@ describe('upload render boundaries', () => {
                 { author: 'Ian', name: 'Recipe B', notes: '', sourceUrl: '', submitState: 'idle' }
             )
         ).toBe(false);
+    });
+
+    it('keeps the section render key stable within a batch and changes it across batches', () => {
+        expect(buildSectionRenderKey(2, 'section-fp-1')).toBe(buildSectionRenderKey(2, 'section-fp-1'));
+        expect(buildSectionRenderKey(2, 'section-fp-1')).not.toBe(buildSectionRenderKey(3, 'section-fp-1'));
+        expect(buildSectionRenderKey(2, 'section-fp-1')).not.toBe(buildSectionRenderKey(2, 'section-fp-2'));
+        expect(buildSectionRenderKey(2, 'section-fp-1')).toBe('2:section-fp-1');
+    });
+
+    it('serializes EXIF batch work so one drop batch cannot dispose the tool under another', async () => {
+        const events = [];
+        let releaseFirstBatch;
+
+        const firstBatch = runExclusiveExifBatch(async () => {
+            events.push('first:start');
+            await new Promise((resolve) => {
+                releaseFirstBatch = resolve;
+            });
+            events.push('first:end');
+            return 'first';
+        });
+
+        const secondBatch = runExclusiveExifBatch(async () => {
+            events.push('second:start');
+            events.push('second:end');
+            return 'second';
+        });
+
+        await Promise.resolve();
+        expect(events).toEqual(['first:start']);
+
+        releaseFirstBatch();
+
+        await expect(firstBatch).resolves.toBe('first');
+        await expect(secondBatch).resolves.toBe('second');
+        expect(events).toEqual(['first:start', 'first:end', 'second:start', 'second:end']);
+    });
+
+    it('only applies upload state updates for the latest drop request', () => {
+        expect(shouldApplyUploadRequestResult(4, 4)).toBe(true);
+        expect(shouldApplyUploadRequestResult(5, 4)).toBe(false);
     });
 });

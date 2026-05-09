@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { dispose as disposeExifTool, parseMetadata } from '@uswriting/exiftool';
 
@@ -14,6 +14,7 @@ import { computeRecipeFingerprint } from 'lib/recipeFingerprint.js';
 import { buildUploadSections } from './group-upload-candidates.js';
 import InvalidUploadFilesCard from './InvalidUploadFilesCard.jsx';
 import RecipeUploadSection from './RecipeUploadSection.jsx';
+import { buildSectionRenderKey } from './render-boundaries.js';
 
 function buildCandidateId(file, index) {
   const safeName = String(file?.name || 'file').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
@@ -31,35 +32,44 @@ function buildRejectionError(errors) {
     .join(' ');
 }
 
+let exifBatchQueue = Promise.resolve();
+
+export function runExclusiveExifBatch(task) {
+  const queuedTask = exifBatchQueue.then(task, task);
+  exifBatchQueue = queuedTask.catch(() => {});
+  return queuedTask;
+}
+
+export function shouldApplyUploadRequestResult(activeRequestId, requestId) {
+  return activeRequestId === requestId;
+}
+
 export default function RecipeUpload({ initialAuthor = "" }) {
   const [candidates, setCandidates] = useState([]);
   const [sections, setSections] = useState([]);
   const [invalidFiles, setInvalidFiles] = useState([]);
   const [dropError, setDropError] = useState('');
   const [isParsingFiles, setIsParsingFiles] = useState(false);
+  const [reviewBatchId, setReviewBatchId] = useState(0);
+  const latestDropRequestRef = useRef(0);
 
   const hasReviewState = sections.length > 0 || invalidFiles.length > 0;
   const parsedImageCount = sections.reduce((count, section) => count + section.fileIds.length, 0);
 
   const parseExif = async (file) => {
-    try {
-      const result = await parseMetadata(file, {
-        args: RECIPE_EXIFTOOL_ARGS
-      });
+    const result = await parseMetadata(file, {
+      args: RECIPE_EXIFTOOL_ARGS
+    });
 
-      if (!result?.success) {
-        throw new Error(result?.error || 'Unable to read EXIF metadata');
-      }
-
-      return parseRecipeSettingsFromExif(result.data);
-    } finally {
-      // Release the cached WASM/virtual filesystem once parsing completes to
-      // keep mobile Safari from carrying that memory through the rest of review.
-      await disposeExifTool().catch(() => {});
+    if (!result?.success) {
+      throw new Error(result?.error || 'Unable to read EXIF metadata');
     }
+
+    return parseRecipeSettingsFromExif(result.data);
   };
 
   const clearReview = () => {
+    latestDropRequestRef.current += 1;
     setCandidates([]);
     setSections([]);
     setInvalidFiles([]);
@@ -68,47 +78,60 @@ export default function RecipeUpload({ initialAuthor = "" }) {
   };
 
   const onDrop = async (acceptedFiles, fileRejections = []) => {
+    const requestId = latestDropRequestRef.current + 1;
+    latestDropRequestRef.current = requestId;
     setIsParsingFiles(true);
     setDropError('');
 
     try {
-      const parsedCandidates = await Promise.all(
-        acceptedFiles.map(async (file, index) => {
-          const id = buildCandidateId(file, index);
+      const parsedCandidates = await runExclusiveExifBatch(async () => {
+        try {
+          const nextParsedCandidates = [];
 
-          try {
-            const recipeSettings = await parseExif(file);
+          for (const [index, file] of acceptedFiles.entries()) {
+            const id = buildCandidateId(file, index);
 
-            if (!recipeSettings?.hasColorProfileSettings) {
-              return {
+            try {
+              const recipeSettings = await parseExif(file);
+
+              if (!recipeSettings?.hasColorProfileSettings) {
+                nextParsedCandidates.push({
+                  id,
+                  file,
+                  fileName: file.name,
+                  status: 'invalid',
+                  error: 'No recipe found. Upload straight out of camera JPGs from OM-3, Pen-F, or E-P7 cameras.'
+                });
+                continue;
+              }
+
+              nextParsedCandidates.push({
+                id,
+                file,
+                fileName: file.name,
+                status: 'parsed',
+                recipeSettings,
+                exactFingerprint: computeRecipeFingerprint(recipeSettings)
+              });
+            } catch (error) {
+              console.error(error);
+              nextParsedCandidates.push({
                 id,
                 file,
                 fileName: file.name,
                 status: 'invalid',
-                error: 'No recipe found. Upload straight out of camera JPGs from OM-3, Pen-F, or E-P7 cameras.'
-              };
+                error: `EXIF read error: ${error?.message || String(error)}`
+              });
             }
-
-            return {
-              id,
-              file,
-              fileName: file.name,
-              status: 'parsed',
-              recipeSettings,
-              exactFingerprint: computeRecipeFingerprint(recipeSettings)
-            };
-          } catch (error) {
-            console.error(error);
-            return {
-              id,
-              file,
-              fileName: file.name,
-              status: 'invalid',
-              error: `EXIF read error: ${error?.message || String(error)}`
-            };
           }
-        })
-      );
+
+          return nextParsedCandidates;
+        } finally {
+          // The EXIF parser is shared state. Dispose it once after each serialized
+          // batch so one file does not tear it down under another.
+          await disposeExifTool().catch(() => {});
+        }
+      });
 
       const rejectedCandidates = fileRejections.map(({ file, errors }, index) => ({
         id: buildCandidateId(file, acceptedFiles.length + index),
@@ -121,15 +144,26 @@ export default function RecipeUpload({ initialAuthor = "" }) {
       const nextCandidates = [...parsedCandidates, ...rejectedCandidates];
       const grouped = buildUploadSections(nextCandidates, { initialAuthor });
 
+      if (!shouldApplyUploadRequestResult(latestDropRequestRef.current, requestId)) {
+        return;
+      }
+
       setCandidates(nextCandidates);
       setSections(grouped.sections);
       setInvalidFiles(grouped.invalidFiles);
+      setReviewBatchId((currentBatchId) => currentBatchId + 1);
     } catch (error) {
+      if (!shouldApplyUploadRequestResult(latestDropRequestRef.current, requestId)) {
+        return;
+      }
+
       console.error(error);
       clearReview();
       setDropError(error?.message || 'Failed to prepare upload review.');
     } finally {
-      setIsParsingFiles(false);
+      if (shouldApplyUploadRequestResult(latestDropRequestRef.current, requestId)) {
+        setIsParsingFiles(false);
+      }
     }
   };
 
@@ -209,7 +243,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
 
             return (
               <RecipeUploadSection
-                key={section.id}
+                key={buildSectionRenderKey(reviewBatchId, section.id)}
                 section={section}
                 files={sectionFiles}
               />

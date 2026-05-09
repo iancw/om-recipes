@@ -39,3 +39,7 @@ export function areSectionFormPropsEqual(prevProps, nextProps) {
         && prevProps.sourceUrl === nextProps.sourceUrl
         && prevProps.submitState === nextProps.submitState;
 }
+
+export function buildSectionRenderKey(batchId, sectionId) {
+    return `${batchId}:${sectionId}`;
+}

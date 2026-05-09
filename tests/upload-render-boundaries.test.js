@@ -10,8 +10,10 @@ import {
     buildSuccessSummary,
     buildRetryAttachState,
     buildMatchCheckFailureState,
+    buildBlockingMatchMessage,
     getSectionFieldValidation,
     getVisiblePreviewUrls,
+    resolveSectionMatchState,
     shouldShowSectionForm,
     trimUploadedFilesAfterFailure
 } from '../app/upload/RecipeUploadSection.jsx';
@@ -160,10 +162,87 @@ describe('upload render boundaries', () => {
             buildMatchCheckFailureState(new Error('network down'))
         ).toEqual({
             matchedRecipe: null,
+            blockingRecipe: null,
+            blockingMatchLevel: null,
             mode: null,
             matchState: 'error',
             matchError: 'network down'
         });
+    });
+
+    it('resolves exact matches into attach mode', () => {
+        expect(
+            resolveSectionMatchState({
+                full: {
+                    slug: 'exact-recipe',
+                    recipeName: 'Exact Recipe'
+                },
+                noWb: {
+                    slug: 'close-recipe',
+                    recipeName: 'Close Recipe'
+                }
+            })
+        ).toEqual({
+            matchedRecipe: {
+                slug: 'exact-recipe',
+                recipeName: 'Exact Recipe'
+            },
+            blockingRecipe: null,
+            blockingMatchLevel: null,
+            mode: 'attach'
+        });
+    });
+
+    it('blocks create mode when a no-WB partial match exists without an exact match', () => {
+        expect(
+            resolveSectionMatchState({
+                full: null,
+                noWb: {
+                    slug: 'near-duplicate',
+                    recipeName: 'Near Duplicate'
+                },
+                colorTone: {
+                    slug: 'weaker-match',
+                    recipeName: 'Weaker Match'
+                }
+            })
+        ).toEqual({
+            matchedRecipe: null,
+            blockingRecipe: {
+                slug: 'near-duplicate',
+                recipeName: 'Near Duplicate'
+            },
+            blockingMatchLevel: 'noWb',
+            mode: 'blocked'
+        });
+    });
+
+    it('allows create mode when there is no exact or partial fingerprint match', () => {
+        expect(
+            resolveSectionMatchState({
+                full: null,
+                noWb: null,
+                colorTone: null,
+                color: null
+            })
+        ).toEqual({
+            matchedRecipe: null,
+            blockingRecipe: null,
+            blockingMatchLevel: null,
+            mode: 'create'
+        });
+    });
+
+    it('describes the strongest partial match when blocking upload creation', () => {
+        expect(
+            buildBlockingMatchMessage({
+                blockingRecipe: {
+                    recipeName: 'Existing Recipe',
+                    authorName: 'Existing Author'
+                },
+                blockingMatchLevel: 'noWb'
+            })
+        ).toBe('Too close to an existing recipe. "Existing Recipe" by Existing Author already matches these settings except for white balance. Uploading a new recipe is disabled for this section.');
     });
 
     it('trims already uploaded files after a partial section failure', () => {
@@ -307,10 +386,14 @@ describe('upload render boundaries', () => {
     });
 
     it('hides the section form after a successful upload', () => {
-        expect(shouldShowSectionForm('idle')).toBe(true);
-        expect(shouldShowSectionForm('uploading')).toBe(true);
-        expect(shouldShowSectionForm('error')).toBe(true);
-        expect(shouldShowSectionForm('ok')).toBe(false);
+        expect(shouldShowSectionForm('idle', 'create')).toBe(true);
+        expect(shouldShowSectionForm('uploading', 'create')).toBe(true);
+        expect(shouldShowSectionForm('error', 'create')).toBe(true);
+        expect(shouldShowSectionForm('ok', 'create')).toBe(false);
+    });
+
+    it('hides the section form when upload creation is blocked by a partial match', () => {
+        expect(shouldShowSectionForm('idle', 'blocked')).toBe(false);
     });
 
     it('builds a created recipe link from the authoritative success result', () => {

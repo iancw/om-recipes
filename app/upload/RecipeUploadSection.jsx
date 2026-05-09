@@ -205,8 +205,8 @@ export function getVisiblePreviewUrls({ previewUrls, resolvedPreviewBatchKey, pr
     return Array.isArray(previewUrls) ? previewUrls : [];
 }
 
-export function shouldShowSectionForm(submitState) {
-    return submitState !== 'ok';
+export function shouldShowSectionForm(submitState, mode = 'create') {
+    return submitState !== 'ok' && mode !== 'blocked';
 }
 
 export function removePendingFileAtIndex(files, indexToRemove) {
@@ -283,10 +283,83 @@ function buildErrorSummary(result) {
 export function buildMatchCheckFailureState(error) {
     return {
         matchedRecipe: null,
+        blockingRecipe: null,
+        blockingMatchLevel: null,
         mode: null,
         matchState: 'error',
         matchError: error?.message || String(error) || 'Failed to check for existing recipes.'
     };
+}
+
+function findBlockingMatch(result) {
+    if (result?.noWb) {
+        return {
+            blockingRecipe: result.noWb,
+            blockingMatchLevel: 'noWb'
+        };
+    }
+
+    if (result?.colorTone) {
+        return {
+            blockingRecipe: result.colorTone,
+            blockingMatchLevel: 'colorTone'
+        };
+    }
+
+    if (result?.color) {
+        return {
+            blockingRecipe: result.color,
+            blockingMatchLevel: 'color'
+        };
+    }
+
+    return {
+        blockingRecipe: null,
+        blockingMatchLevel: null
+    };
+}
+
+export function resolveSectionMatchState(result) {
+    if (result?.full) {
+        return {
+            matchedRecipe: result.full,
+            blockingRecipe: null,
+            blockingMatchLevel: null,
+            mode: 'attach'
+        };
+    }
+
+    const partialMatch = findBlockingMatch(result);
+    if (partialMatch.blockingRecipe) {
+        return {
+            matchedRecipe: null,
+            blockingRecipe: partialMatch.blockingRecipe,
+            blockingMatchLevel: partialMatch.blockingMatchLevel,
+            mode: 'blocked'
+        };
+    }
+
+    return {
+        matchedRecipe: null,
+        blockingRecipe: null,
+        blockingMatchLevel: null,
+        mode: 'create'
+    };
+}
+
+export function buildBlockingMatchMessage({ blockingRecipe, blockingMatchLevel }) {
+    const recipeName = blockingRecipe?.recipeName ? `"${blockingRecipe.recipeName}"` : 'An existing recipe';
+    const authorName = blockingRecipe?.authorName ? ` by ${blockingRecipe.authorName}` : '';
+
+    if (blockingMatchLevel === 'noWb') {
+        return `Too close to an existing recipe. ${recipeName}${authorName} already matches these settings except for white balance. Uploading a new recipe is disabled for this section.`;
+    }
+
+    if (blockingMatchLevel === 'colorTone') {
+        return `Too close to an existing recipe. ${recipeName}${authorName} already matches this recipe's color and tone settings. Uploading a new recipe is disabled for this section.`;
+    }
+
+    return `Too close to an existing recipe. ${recipeName}${authorName} already matches this recipe's core color settings. Uploading a new recipe is disabled for this section.`;
 }
 
 export function trimUploadedFilesAfterFailure(files, uploadedCount) {
@@ -370,6 +443,8 @@ export default function RecipeUploadSection({ section, files = [] }) {
     const [sourceUrl, setSourceUrl] = useState(() => section?.form?.sourceUrl || '');
     const [mode, setMode] = useState(() => section?.mode || 'create');
     const [matchedRecipe, setMatchedRecipe] = useState(() => section?.matchedRecipe || null);
+    const [blockingRecipe, setBlockingRecipe] = useState(() => section?.blockingRecipe || null);
+    const [blockingMatchLevel, setBlockingMatchLevel] = useState(() => section?.blockingMatchLevel || null);
     const [matchState, setMatchState] = useState(() => (section?.recipeSettings ? 'loading' : 'error'));
     const [matchError, setMatchError] = useState(() => (
         section?.recipeSettings
@@ -453,6 +528,8 @@ export default function RecipeUploadSection({ section, files = [] }) {
 
                 const failureState = buildMatchCheckFailureState(error);
                 setMatchedRecipe(failureState.matchedRecipe);
+                setBlockingRecipe(failureState.blockingRecipe);
+                setBlockingMatchLevel(failureState.blockingMatchLevel);
                 setMode(failureState.mode);
                 setMatchState(failureState.matchState);
                 setMatchError(failureState.matchError);
@@ -466,14 +543,19 @@ export default function RecipeUploadSection({ section, files = [] }) {
             if (!result?.ok) {
                 const failureState = buildMatchCheckFailureState(result?.error);
                 setMatchedRecipe(failureState.matchedRecipe);
+                setBlockingRecipe(failureState.blockingRecipe);
+                setBlockingMatchLevel(failureState.blockingMatchLevel);
                 setMode(failureState.mode);
                 setMatchState(failureState.matchState);
                 setMatchError(failureState.matchError);
                 return;
             }
 
-            setMatchedRecipe(result.full ?? null);
-            setMode(result.full ? 'attach' : 'create');
+            const nextMatchState = resolveSectionMatchState(result);
+            setMatchedRecipe(nextMatchState.matchedRecipe);
+            setBlockingRecipe(nextMatchState.blockingRecipe);
+            setBlockingMatchLevel(nextMatchState.blockingMatchLevel);
+            setMode(nextMatchState.mode);
             setMatchState('ready');
             setMatchError('');
         }
@@ -494,7 +576,11 @@ export default function RecipeUploadSection({ section, files = [] }) {
     const omWorkspaceWarning = section?.recipeSettings?.isOmWorkspace
         ? 'Warning: This JPG was produced by OM Workspace. JPGs produced by OM Workspace may not have accurate recipe data in EXIF. Carefully check the detected recipe settings before continuing.'
         : '';
-    const isSubmitDisabled = submitState === 'uploading' || submitState === 'ok' || matchState !== 'ready' || fileCount === 0;
+    const isSubmitDisabled = submitState === 'uploading'
+        || submitState === 'ok'
+        || matchState !== 'ready'
+        || fileCount === 0
+        || mode === 'blocked';
     const isFormDisabled = submitState === 'uploading' || submitState === 'ok';
     const removeDisabled = submitState === 'uploading' || submitState === 'ok';
     const submitButtonLabel = getSubmitButtonLabel({
@@ -633,7 +719,7 @@ export default function RecipeUploadSection({ section, files = [] }) {
                 <DetectedRecipeSettingsCard recipe={section?.recipeSettings || null} />
                 {matchState === 'loading' && (
                     <Alert>
-                        Checking for an existing recipe with these exact settings before enabling this section.
+                        Checking for an existing recipe with these settings before enabling this section.
                     </Alert>
                 )}
                 {matchState !== 'loading' && matchedRecipe && (
@@ -641,7 +727,15 @@ export default function RecipeUploadSection({ section, files = [] }) {
                         Exact match found. This section will attach {pluralizeImages(fileCount)} to &quot;{matchedRecipe.recipeName || 'Existing recipe'}&quot; by {matchedRecipe.authorName || 'the existing author'}.
                     </Alert>
                 )}
-                {matchState === 'ready' && !matchedRecipe && (
+                {matchState === 'ready' && !matchedRecipe && blockingRecipe && (
+                    <Alert>
+                        {buildBlockingMatchMessage({
+                            blockingRecipe,
+                            blockingMatchLevel
+                        })}
+                    </Alert>
+                )}
+                {matchState === 'ready' && !matchedRecipe && !blockingRecipe && (
                     <Alert>
                         No exact match found. Submitting this section will create a new recipe from the metadata below.
                     </Alert>
@@ -673,7 +767,7 @@ export default function RecipeUploadSection({ section, files = [] }) {
                         {buildUploadProgressSummary(uploadProgress)}
                     </Alert>
                 )}
-                {shouldShowSectionForm(submitState) && (
+                {shouldShowSectionForm(submitState, mode) && (
                     <SectionFormFields
                         author={author}
                         name={name}

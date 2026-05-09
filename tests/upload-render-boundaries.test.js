@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
     areDetectedRecipeSettingsPropsEqual,
+    areSectionFormPropsEqual,
+    areSectionPreviewPropsEqual,
     areUploadPreviewPropsEqual
 } from '../app/upload/render-boundaries.js';
 
@@ -64,6 +66,34 @@ describe('upload render boundaries', () => {
                     isPreparingPreview: false,
                     onRemoveImage
                 }
+            )
+        ).toBe(false);
+    });
+
+    it('ignores section form edits when preview props are unchanged', () => {
+        const previewProps = {
+            fileNames: ['one.jpg', 'two.jpg'],
+            previewUrls: ['blob:1', 'blob:2'],
+            disablePreview: false,
+            isPreparingPreview: false,
+            recipeId: 'section-fp-1'
+        };
+
+        expect(
+            areSectionPreviewPropsEqual(previewProps, {
+                ...previewProps,
+                author: 'New Author',
+                name: 'New Recipe Name',
+                notes: 'New Notes'
+            })
+        ).toBe(true);
+    });
+
+    it('rerenders the section form subtree when section metadata changes', () => {
+        expect(
+            areSectionFormPropsEqual(
+                { author: 'Ian', name: 'Recipe A', notes: '', sourceUrl: '', submitState: 'idle' },
+                { author: 'Ian', name: 'Recipe B', notes: '', sourceUrl: '', submitState: 'idle' }
             )
         ).toBe(false);
     });

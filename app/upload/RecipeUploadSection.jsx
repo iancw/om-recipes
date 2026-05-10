@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from 'components/ui/card';
 import { Input } from 'components/ui/input';
 import { Textarea } from 'components/ui/textarea';
 import { getRecipePath } from 'lib/recipe-url.js';
-import { createUploadPreviewUrl, shouldDisableUploadPreview } from 'lib/upload-preview.js';
+import { createUploadPreviewUrls, shouldDisableUploadPreview } from 'lib/upload-preview.js';
 
 import DetectedRecipeSettingsCard from './DetectedRecipeSettingsCard';
 import { areSectionPreviewPropsEqual } from './render-boundaries.js';
@@ -207,6 +207,18 @@ export function removePendingFileAtIndex(files, indexToRemove) {
     }
 
     return files.filter((_, index) => index !== indexToRemove);
+}
+
+function resolvePreviewDisabled(fileCount) {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+
+    return shouldDisableUploadPreview({
+        deviceMemory: window.navigator?.deviceMemory,
+        fileCount,
+        userAgent: window.navigator?.userAgent
+    });
 }
 
 function getSubmitButtonLabel({ fileCount, matchState, mode, submitState }) {
@@ -443,7 +455,7 @@ export default function RecipeUploadSection({ section, files = [] }) {
             ? (section?.matchError || '')
             : 'Recipe settings are missing for this section.'
     ));
-    const [disablePreview, setDisablePreview] = useState(false);
+    const [disablePreview, setDisablePreview] = useState(() => resolvePreviewDisabled(files.length));
     const [pendingFiles, setPendingFiles] = useState(() => files);
     const [previewUrls, setPreviewUrls] = useState([]);
     const [resolvedPreviewBatchKey, setResolvedPreviewBatchKey] = useState(() => (files.length === 0 ? 'empty' : ''));
@@ -462,27 +474,38 @@ export default function RecipeUploadSection({ section, files = [] }) {
 
     useEffect(() => {
         const frameId = window.requestAnimationFrame(() => {
-            setDisablePreview(shouldDisableUploadPreview(window.navigator?.deviceMemory));
+            setDisablePreview(resolvePreviewDisabled(pendingFiles.length));
         });
 
         return () => {
             window.cancelAnimationFrame(frameId);
         };
-    }, []);
+    }, [pendingFiles.length]);
 
     useEffect(() => {
         let isActive = true;
         let nextPreviewUrls = [];
+        let resetFrameId = null;
 
         if (!pendingFiles.length || disablePreview) {
-            setPreviewUrls([]);
-            setResolvedPreviewBatchKey(previewBatchKey);
-            return undefined;
+            resetFrameId = window.requestAnimationFrame(() => {
+                if (!isActive) {
+                    return;
+                }
+
+                setPreviewUrls([]);
+                setResolvedPreviewBatchKey(previewBatchKey);
+            });
+
+            return () => {
+                isActive = false;
+                if (resetFrameId !== null) {
+                    window.cancelAnimationFrame(resetFrameId);
+                }
+            };
         }
 
-        Promise.all(
-            pendingFiles.map((file) => createUploadPreviewUrl(file).catch(() => null))
-        )
+        createUploadPreviewUrls(pendingFiles)
             .then((urls) => {
                 if (!isActive) {
                     urls.filter(Boolean).forEach((url) => URL.revokeObjectURL(url));
@@ -499,6 +522,9 @@ export default function RecipeUploadSection({ section, files = [] }) {
 
         return () => {
             isActive = false;
+            if (resetFrameId !== null) {
+                window.cancelAnimationFrame(resetFrameId);
+            }
             nextPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
         };
     }, [disablePreview, pendingFiles, previewBatchKey]);

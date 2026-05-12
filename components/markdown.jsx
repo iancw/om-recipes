@@ -18,8 +18,12 @@ export function Markdown({ content, className }) {
         <MarkdownToJsx
             className={['markdown', className].filter(Boolean).join(' ')}
             options={{
+                forceBlock: true,
                 overrides: {
-                    pre: HighlightedCodeBlock
+                    pre: HighlightedCodeBlock,
+                    ul: { props: { className: 'list-disc pl-6 space-y-2' } },
+                    ol: { props: { className: 'list-decimal pl-6 space-y-2' } },
+                    li: { props: { className: 'pl-1' } }
                 }
             }}
         >

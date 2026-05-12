@@ -49,6 +49,22 @@ describe('recipe image selection helpers', () => {
         expect(getPrimarySampleImage(recipe)).toEqual({ id: 'sample-1' });
     });
 
+    it('ignores hidden images when choosing visible samples and comparisons', () => {
+        const recipe = {
+            sampleImages: [
+                { id: 'sample-hidden', isPrimary: true, copyright: false },
+                { id: 'sample-visible' }
+            ],
+            comparisonImages: [
+                { id: 'comparison-hidden', label: 'Lighthouse', copyright: false },
+                { id: 'comparison-visible', label: 'Watch Hill' }
+            ]
+        };
+
+        expect(getPrimarySampleImage(recipe)).toEqual({ id: 'sample-visible' });
+        expect(getRecipePreviewImage(recipe, comparisonImageSelectionValue('lighthouse'))).toBeNull();
+    });
+
     it('returns the matching comparison image by label', () => {
         const recipe = {
             sampleImages: [{ id: 'sample-1' }],
@@ -170,5 +186,22 @@ describe('recipe image selection helpers', () => {
         };
 
         expect(getRecipeDownloadUrl(recipe)).toBe('https://images.om-recipes.com/original/a.jpg');
+    });
+
+    it('returns no URLs for hidden images', () => {
+        const hiddenImage = {
+            id: 'sample-hidden',
+            copyright: false,
+            assetUrls: {
+                640: 'https://images.om-recipes.com/640/a.jpg',
+                1200: 'https://images.om-recipes.com/1200/a.jpg',
+                original: 'https://images.om-recipes.com/original/a.jpg'
+            },
+            smallUrl: '/assets/images/320/a.jpg',
+            fullSizeUrl: '/assets/images/original/a.jpg'
+        };
+
+        expect(getImagePreviewUrl(hiddenImage)).toBeNull();
+        expect(getRecipeModalImageUrl(hiddenImage)).toBeNull();
     });
 });

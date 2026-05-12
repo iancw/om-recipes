@@ -1,0 +1,1 @@
+ALTER TABLE "images" ADD COLUMN "copyright" boolean DEFAULT true NOT NULL;

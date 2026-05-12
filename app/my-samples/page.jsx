@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import MySamplesGrid from '../../components/MySamplesGrid.jsx';
 import { Badge } from '../../components/ui/badge.jsx';
 import { buttonVariants } from '../../components/ui/button.jsx';
@@ -33,6 +33,7 @@ async function getSampleImagesUploadedByUserId({ userId, limit = 500 }) {
             recipeAuthorName: recipes.authorName,
             image: {
                 id: images.id,
+                copyright: images.copyright,
                 preparedObjectKey: images.preparedObjectKey,
                 smallUrl: images.smallUrl,
                 fullSizeUrl: images.fullSizeUrl,
@@ -44,14 +45,14 @@ async function getSampleImagesUploadedByUserId({ userId, limit = 500 }) {
         .from(recipeSampleImages)
         .innerJoin(recipes, eq(recipes.id, recipeSampleImages.recipeId))
         .leftJoin(images, eq(images.id, recipeSampleImages.imageId))
-        .where(inArray(recipeSampleImages.authorId, uploaderAuthorIds))
+        .where(and(inArray(recipeSampleImages.authorId, uploaderAuthorIds), eq(images.copyright, true)))
         .orderBy(desc(images.createdAt))
         .limit(limit)
         .then((rows) =>
             rows.map((row) => ({
                 ...row,
                 image: hydrateRecipeImageRecord(row.image)
-            }))
+            })).filter((row) => row.image?.id && row.image.copyright !== false)
         );
 }
 

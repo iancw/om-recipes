@@ -88,6 +88,7 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
                 label: recipeComparisonImages.label,
                 image: {
                     id: images.id,
+                    copyright: images.copyright,
                     preparedObjectKey: images.preparedObjectKey,
                     smallUrl: images.smallUrl,
                     fullSizeUrl: images.fullSizeUrl,
@@ -98,12 +99,13 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
             })
             .from(recipeComparisonImages)
             .leftJoin(images, eq(images.id, recipeComparisonImages.imageId))
-            .where(eq(recipeComparisonImages.recipeId, recipeId)),
+            .where(and(eq(recipeComparisonImages.recipeId, recipeId), eq(images.copyright, true))),
 
         db
             .select({
                 image: {
                     id: images.id,
+                    copyright: images.copyright,
                     preparedObjectKey: images.preparedObjectKey,
                     smallUrl: images.smallUrl,
                     fullSizeUrl: images.fullSizeUrl,
@@ -126,16 +128,16 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
             .from(recipeSampleImages)
             .leftJoin(images, eq(images.id, recipeSampleImages.imageId))
             .leftJoin(authors, eq(authors.id, recipeSampleImages.authorId))
-            .where(eq(recipeSampleImages.recipeId, recipeId))
+            .where(and(eq(recipeSampleImages.recipeId, recipeId), eq(images.copyright, true)))
             .orderBy(asc(recipeSampleImages.imageId))
     ]);
 
     const comparisonImages = (comparisonRows ?? [])
-        .map((r) => (r.image?.id ? { ...hydrateRecipeImageRecord(r.image), label: r.label } : null))
+        .map((r) => (r.image?.id && r.image.copyright !== false ? { ...hydrateRecipeImageRecord(r.image), label: r.label } : null))
         .filter(Boolean);
     const sampleImages = (sampleRows ?? [])
         .map((r) => {
-            if (!r?.image?.id) return null;
+            if (!r?.image?.id || r.image.copyright === false) return null;
             return {
                 ...hydrateRecipeImageRecord(r.image),
                 isPrimary: r.isPrimary,

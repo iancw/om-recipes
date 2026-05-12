@@ -148,9 +148,45 @@ describe('recipe detail page redirects', () => {
                         camera: 'OM-3',
                         lens: '25mm'
                     }
+                },
+                {
+                    label: 'Hidden',
+                    image: {
+                        id: 202,
+                        preparedObjectKey: 'authors/a/recipes/r/hidden-comparison.jpg',
+                        smallUrl: '/assets/images/320/authors/a/recipes/r/hidden-comparison.jpg',
+                        fullSizeUrl: '/assets/images/original/authors/a/recipes/r/hidden-comparison.jpg',
+                        dimensions: { width: 320, height: 200 },
+                        camera: 'OM-3',
+                        lens: '25mm',
+                        copyright: false
+                    }
                 }
             ],
             [
+                {
+                    image: {
+                        id: 300,
+                        preparedObjectKey: 'authors/a/recipes/r/hidden-primary.jpg',
+                        smallUrl: '/assets/images/320/authors/a/recipes/r/hidden-primary.jpg',
+                        fullSizeUrl: '/assets/images/original/authors/a/recipes/r/hidden-primary.jpg',
+                        dimensions: { width: 320, height: 200 },
+                        camera: 'OM-3',
+                        lens: '25mm',
+                        validExif: true,
+                        copyright: false
+                    },
+                    isPrimary: true,
+                    author: {
+                        id: 9,
+                        uuid: 'author-uuid',
+                        name: 'Photographer',
+                        instagramLink: null,
+                        flickrLink: null,
+                        website: null,
+                        kofiLink: null
+                    }
+                },
                 {
                     image: {
                         id: 301,
@@ -214,7 +250,7 @@ describe('recipe detail page redirects', () => {
             id: 201,
             preparedObjectKey: 'authors/a/recipes/r/comparison.jpg',
             assetUrls: {
-                original: 'https://images.om-recipes.com/original/authors/a/recipes/r/comparison.jpg'
+                original: 'https://images.om-recipes.com/authors/a/recipes/r/comparison.jpg'
             },
             label: 'Before'
         });
@@ -222,10 +258,12 @@ describe('recipe detail page redirects', () => {
             id: 301,
             preparedObjectKey: 'authors/a/recipes/r/sample.jpg',
             assetUrls: {
-                original: 'https://images.om-recipes.com/original/authors/a/recipes/r/sample.jpg'
+                original: 'https://images.om-recipes.com/authors/a/recipes/r/sample.jpg'
             },
             isPrimary: true
         });
+        expect(recipeCardProps.recipe.comparisonImages).toHaveLength(1);
+        expect(recipeCardProps.recipe.sampleImages).toHaveLength(1);
     });
 
     it('uses the asset host for recipe Open Graph images', async () => {
@@ -239,7 +277,7 @@ describe('recipe detail page redirects', () => {
 
         expect(metadata.openGraph.images).toEqual([
             {
-                url: 'https://images.om-recipes.com/original/authors/a/recipes/r/sample.jpg'
+                url: 'https://images.om-recipes.com/authors/a/recipes/r/sample.jpg'
             }
         ]);
     });

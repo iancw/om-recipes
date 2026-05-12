@@ -153,6 +153,7 @@ export async function GET(request) {
         label: recipeComparisonImages.label,
         image: {
           id: images.id,
+          copyright: images.copyright,
           preparedObjectKey: images.preparedObjectKey,
           smallUrl: images.smallUrl,
           fullSizeUrl: images.fullSizeUrl,
@@ -163,13 +164,14 @@ export async function GET(request) {
       })
       .from(recipeComparisonImages)
       .leftJoin(images, eq(images.id, recipeComparisonImages.imageId))
-      .where(inArray(recipeComparisonImages.recipeId, recipeIds)),
+      .where(and(inArray(recipeComparisonImages.recipeId, recipeIds), eq(images.copyright, true))),
 
     db
       .select({
         recipeId: recipeSampleImages.recipeId,
         image: {
           id: images.id,
+          copyright: images.copyright,
           preparedObjectKey: images.preparedObjectKey,
           smallUrl: images.smallUrl,
           fullSizeUrl: images.fullSizeUrl,
@@ -192,7 +194,7 @@ export async function GET(request) {
       .from(recipeSampleImages)
       .leftJoin(images, eq(images.id, recipeSampleImages.imageId))
       .leftJoin(authors, eq(authors.id, recipeSampleImages.authorId))
-      .where(inArray(recipeSampleImages.recipeId, recipeIds))
+      .where(and(inArray(recipeSampleImages.recipeId, recipeIds), eq(images.copyright, true)))
       .orderBy(
         asc(recipeSampleImages.recipeId),
         asc(recipeSampleImages.imageId)
@@ -224,12 +226,12 @@ export async function GET(request) {
   }
 
   const comparisonByRecipeId = groupByRecipeId(comparisonRows, (row) => {
-    if (!row.image?.id) return null;
+    if (!row.image?.id || row.image.copyright === false) return null;
     return { ...hydrateRecipeImageRecord(row.image), label: row.label };
   });
 
   const sampleImagesByRecipeId = groupByRecipeId(sampleRows, (row) => {
-    if (!row.image?.id) return null;
+    if (!row.image?.id || row.image.copyright === false) return null;
     return {
       ...hydrateRecipeImageRecord(row.image),
       isPrimary: row.isPrimary,

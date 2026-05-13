@@ -49,6 +49,40 @@ describe('recipe image selection helpers', () => {
         expect(getPrimarySampleImage(recipe)).toEqual({ id: 'sample-1' });
     });
 
+    it('falls back to a comparison image when no sample images are available', () => {
+        const recipe = {
+            id: 42,
+            sampleImages: [],
+            comparisonImages: [
+                { id: 'comparison-1', label: 'lighthouse' },
+                { id: 'comparison-2', label: 'watch hill' },
+                { id: 'comparison-3', label: 'city' }
+            ]
+        };
+
+        const picked = getPrimarySampleImage(recipe);
+        expect(recipe.comparisonImages).toContainEqual(picked);
+        // Selection must be stable for the same recipe.
+        expect(getPrimarySampleImage(recipe)).toEqual(picked);
+    });
+
+    it('skips hidden comparison images when falling back', () => {
+        const recipe = {
+            id: 1,
+            sampleImages: [],
+            comparisonImages: [
+                { id: 'comparison-hidden', label: 'lighthouse', copyright: false },
+                { id: 'comparison-visible', label: 'watch hill' }
+            ]
+        };
+
+        expect(getPrimarySampleImage(recipe)).toEqual({ id: 'comparison-visible', label: 'watch hill' });
+    });
+
+    it('returns null when neither sample nor comparison images are available', () => {
+        expect(getPrimarySampleImage({ sampleImages: [], comparisonImages: [] })).toBeNull();
+    });
+
     it('ignores hidden images when choosing visible samples and comparisons', () => {
         const recipe = {
             sampleImages: [

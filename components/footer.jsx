@@ -23,6 +23,9 @@ export async function Footer() {
                         <Link href="/privacy" className="underline underline-offset-4 transition hover:text-foreground">
                             Privacy
                         </Link>
+                        <Link href="/terms" className="underline underline-offset-4 transition hover:text-foreground">
+                            Terms
+                        </Link>
                         <AnalyticsConsentSettings initialConsent={analyticsConsent} />
                     </div>
                 </div>

@@ -158,6 +158,7 @@ export const images = pgTable(
         finalizedAt: timestamp('finalized_at', { withTimezone: true }),
         fullSizeUrl: text('full_size_url'),
         smallUrl: text('small_url'),
+        copyright: boolean('copyright').default(true).notNull(),
         sha256Hash: text('sha256_hash'),
 
         createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()

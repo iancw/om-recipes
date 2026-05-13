@@ -30,6 +30,9 @@ const RESIZE_TIMEOUT_MS = Math.max(0, Number(process.env.IMAGE_RESIZE_TIMEOUT_MS
 const RESIZE_INVOKE_MAX_ATTEMPTS = Math.max(1, Number(process.env.IMAGE_RESIZE_INVOKE_ATTEMPTS ?? 3));
 const RESIZE_RETRY_DELAY_MS = Math.max(0, Number(process.env.IMAGE_RESIZE_RETRY_DELAY_MS ?? 15000));
 const UPLOAD_DISABLED_ERROR = 'Uploads are disabled right now.';
+const ATTACH_RECIPE_REFERENCE_REQUIRED_ERROR = 'matched_recipe_reference_required';
+const ATTACH_RECIPE_NOT_FOUND_ERROR = 'matched_recipe_not_found';
+const ATTACH_RECIPE_FINGERPRINT_MISMATCH_ERROR = 'matched_recipe_fingerprint_mismatch';
 
 function withResizeTimeout(promise, timeoutMs) {
     if (!timeoutMs || timeoutMs <= 0) return promise;
@@ -128,6 +131,55 @@ function normalizeOptionalUrl(value) {
     }
 
     return parsed.toString();
+}
+
+function normalizeRecipeReference(recipe) {
+    const slug = isBlank(recipe?.slug) ? null : String(recipe.slug).trim();
+    const uuidValue = recipe?.uuid ?? recipe?.recipeUuid;
+    const uuid = isBlank(uuidValue) ? null : String(uuidValue).trim();
+
+    if (!slug && !uuid) {
+        return null;
+    }
+
+    return { slug, uuid };
+}
+
+async function findRecipeByReference(recipeReference) {
+    if (!recipeReference) {
+        return null;
+    }
+
+    const fields = {
+        id: recipes.id,
+        uuid: recipes.uuid,
+        slug: recipes.slug,
+        recipeName: recipes.recipeName,
+        authorName: recipes.authorName,
+        recipeFingerprint: recipes.recipeFingerprint
+    };
+
+    if (recipeReference.uuid) {
+        const uuidRows = await db
+            .select(fields)
+            .from(recipes)
+            .where(eq(recipes.uuid, recipeReference.uuid))
+            .limit(1);
+
+        return uuidRows[0] ?? null;
+    }
+
+    if (!recipeReference.slug) {
+        return null;
+    }
+
+    const slugRows = await db
+        .select(fields)
+        .from(recipes)
+        .where(eq(recipes.slug, recipeReference.slug))
+        .limit(1);
+
+    return slugRows[0] ?? null;
 }
 
 function slugify(value) {
@@ -362,14 +414,27 @@ export async function prepareRecipeUploadAction({ parameters }) {
 
         const session = await requireUser();
 
-        const { author, name, notes, sourceUrl, imageMeta, recipeSettings } = parameters ?? {};
+        const { author, name, notes, sourceUrl, imageMeta, recipeSettings, mode, matchedRecipe } = parameters ?? {};
+        const explicitAttachRequested = mode === 'attach';
+        const explicitAttachRecipe = explicitAttachRequested ? normalizeRecipeReference(matchedRecipe) : null;
 
-        if (isBlank(author) || isBlank(name)) {
+        if (isBlank(author)) {
+            return { ok: false, error: 'Author Name is required' };
+        }
+        if (!explicitAttachRequested && isBlank(name)) {
             return { ok: false, error: 'Author Name and Recipe Name are required' };
         }
         if (!imageMeta) return { ok: false, error: 'Image metadata is required' };
         if (!recipeSettings) {
             return { ok: false, error: 'Recipe settings (parsed from EXIF) are required' };
+        }
+        if (explicitAttachRequested && !explicitAttachRecipe) {
+            return {
+                ok: false,
+                error: 'Matched recipe reference is required for attach uploads',
+                errorCode: ATTACH_RECIPE_REFERENCE_REQUIRED_ERROR,
+                status: 400
+            };
         }
 
         // Enforce maker notes presence: require Color Profile Settings + Tone Level.
@@ -418,18 +483,43 @@ export async function prepareRecipeUploadAction({ parameters }) {
         const colorToneFingerprint = computeColorToneFingerprint(recipeSettings);
         const noWbFingerprint = computeNoWbFingerprint(recipeSettings);
 
-        // Dedupe: match existing recipe by fingerprint (settings-only).
-        const existingRecipe = await db
-            .select({
-                id: recipes.id,
-                uuid: recipes.uuid,
-                slug: recipes.slug,
-                recipeName: recipes.recipeName,
-                authorName: recipes.authorName
-            })
-            .from(recipes)
-            .where(eq(recipes.recipeFingerprint, recipeFingerprint))
-            .limit(1);
+        let existingRecipe;
+
+        if (explicitAttachRecipe) {
+            const exactRecipe = await findRecipeByReference(explicitAttachRecipe);
+            if (!exactRecipe) {
+                return {
+                    ok: false,
+                    error: 'Matched recipe was not found',
+                    errorCode: ATTACH_RECIPE_NOT_FOUND_ERROR,
+                    status: 404
+                };
+            }
+
+            if (exactRecipe.recipeFingerprint !== recipeFingerprint) {
+                return {
+                    ok: false,
+                    error: 'Matched recipe does not match the uploaded recipe settings',
+                    errorCode: ATTACH_RECIPE_FINGERPRINT_MISMATCH_ERROR,
+                    status: 409
+                };
+            }
+
+            existingRecipe = [exactRecipe];
+        } else {
+            // Dedupe: match existing recipe by fingerprint (settings-only).
+            existingRecipe = await db
+                .select({
+                    id: recipes.id,
+                    uuid: recipes.uuid,
+                    slug: recipes.slug,
+                    recipeName: recipes.recipeName,
+                    authorName: recipes.authorName
+                })
+                .from(recipes)
+                .where(eq(recipes.recipeFingerprint, recipeFingerprint))
+                .limit(1);
+        }
 
         const shouldCreateRecipe = existingRecipe.length === 0;
         const recipeId = shouldCreateRecipe ? null : existingRecipe[0].id;
@@ -439,9 +529,9 @@ export async function prepareRecipeUploadAction({ parameters }) {
         let createdRecipeId = recipeId;
         let createdRecipeUuid = recipeUuid;
         let createdSlug = slug;
-        const normalizedSourceUrl = normalizeOptionalUrl(sourceUrl);
 
         if (shouldCreateRecipe) {
+            const normalizedSourceUrl = normalizeOptionalUrl(sourceUrl);
             const baseSlug = `${slugify(author)}_${slugify(name)}`;
             createdSlug = await uniqueRecipeSlug(baseSlug);
 

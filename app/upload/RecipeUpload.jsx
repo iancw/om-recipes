@@ -94,13 +94,13 @@ export default function RecipeUpload({ initialAuthor = "" }) {
             try {
               const recipeSettings = await parseExif(file);
 
-              if (!recipeSettings?.hasColorProfileSettings) {
+              if (!recipeSettings?.hasColorProfileSettings && !recipeSettings?.hasMonochromeProfileSettings) {
                 nextParsedCandidates.push({
                   id,
                   file,
                   fileName: file.name,
                   status: 'invalid',
-                  error: 'No recipe found. Upload straight out of camera JPGs from OM-3, Pen-F, or E-P7 cameras.'
+                  error: 'No recipe found. Upload straight out of camera JPGs with compatible color or monochrome profiles from OM-3, Pen-F, or E-P7 cameras.'
                 });
                 continue;
               }
@@ -143,7 +143,6 @@ export default function RecipeUpload({ initialAuthor = "" }) {
 
       const nextCandidates = [...parsedCandidates, ...rejectedCandidates];
       const grouped = buildUploadSections(nextCandidates, { initialAuthor });
-
       if (!shouldApplyUploadRequestResult(latestDropRequestRef.current, requestId)) {
         return;
       }

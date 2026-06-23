@@ -3,7 +3,7 @@ import { defineConfig } from 'drizzle-kit';
 export default defineConfig({
     dialect: 'postgresql',
     dbCredentials: {
-        url: (process.env.NETLIFY_DATABASE_URL_UNPOOLED ?? process.env.NETLIFY_DATABASE_URL)!
+        url: (process.env.NETLIFY_DATABASE_URL)!
     },
     schema: './db/schema.ts',
     /**

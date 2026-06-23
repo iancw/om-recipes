@@ -64,7 +64,7 @@ bd close <id>         # Complete work
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
 5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed 
+6. **Verify** - All changes committed
 7. **Hand off** - Provide context for next session
 
 <!-- END BEADS INTEGRATION -->

@@ -38,6 +38,7 @@ export default function RecipeSimpleCard({ recipe, onClick, selectedImageOption 
       <CardContent className="flex h-full flex-col gap-4 p-5">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{recipe?.authorName ?? 'Unknown author'}</Badge>
+          <Badge variant="outline">{String(recipe?.type ?? 'COLOR').toUpperCase() === 'MONO' ? 'Monochrome' : 'Color'}</Badge>
           {recipe?.isSaved ? <Badge variant="outline">Saved</Badge> : null}
         </div>
         <div className="space-y-2">

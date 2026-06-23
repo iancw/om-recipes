@@ -4,7 +4,7 @@ import { ContactForm } from './ContactForm';
 
 export const metadata = {
     title: 'About',
-    description: 'Learn about OM Recipes — a community site for discovering and sharing color recipes for OM System and Olympus cameras.'
+    description: 'Learn about OM Recipes — a community site for discovering and sharing color and monochrome recipes for OM System and Olympus cameras.'
 };
 
 export default function AboutPage() {
@@ -15,7 +15,7 @@ export default function AboutPage() {
                 <Badge variant="outline">Community Project</Badge>
                 <h1>About OM Recipes</h1>
                 <p className="text-lg text-muted-foreground leading-relaxed">
-                    A website built for fun to help photographers understand and share color
+                    A website built for fun to help photographers understand and share color and monochrome
                     recipes for OM System cameras.
                 </p>
             </div>

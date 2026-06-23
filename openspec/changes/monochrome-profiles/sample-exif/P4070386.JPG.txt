@@ -1,0 +1,249 @@
+ExifTool Version Number         : 13.50
+File Name                       : P4070386.JPG
+Directory                       : /Users/momdad/Documents/Comparison Images/Mono
+File Size                       : 8.7 MB
+File Modification Date/Time     : 2026:04:07 12:55:52-04:00
+File Access Date/Time           : 2026:04:12 09:39:04-04:00
+File Inode Change Date/Time     : 2026:04:07 14:00:30-04:00
+File Permissions                : -rwx------
+File Type                       : JPEG
+File Type Extension             : jpg
+MIME Type                       : image/jpeg
+Exif Byte Order                 : Little-endian (Intel, II)
+Image Description               : 
+Make                            : OM Digital Solutions
+Camera Model Name               : OM-3
+Orientation                     : Rotate 270 CW
+X Resolution                    : 350
+Y Resolution                    : 350
+Resolution Unit                 : inches
+Software                        : Version 1.1
+Modify Date                     : 2026:04:07 12:55:52
+Artist                          : Ian Will
+Y Cb Cr Positioning             : Co-sited
+Copyright                       : Ian Will
+Exposure Time                   : 1/800
+F Number                        : 8.0
+Exposure Program                : Manual
+ISO                             : 320
+Sensitivity Type                : Standard Output Sensitivity
+Standard Output Sensitivity     : 320
+Exif Version                    : 0300
+Date/Time Original              : 2026:04:07 12:55:52
+Create Date                     : 2026:04:07 12:55:52
+Offset Time                     : -05:00
+Offset Time Original            : -05:00
+Offset Time Digitized           : -05:00
+Components Configuration        : Y, Cb, Cr, -
+Exposure Compensation           : -0.3
+Max Aperture Value              : 1.8
+Light Source                    : Unknown
+Flash                           : Unknown (0x48)
+Focal Length                    : 17.0 mm
+Special Mode                    : Normal, Sequence: 0, Panorama: (none)
+Camera ID                       : OM SYSTEM CAMERA
+Equipment Version               : 0100
+Camera Type 2                   : OM-3
+Serial Number                   : BJSA02543
+Internal Serial Number          : 4239411001274000
+Focal Plane Diagonal            : 21.6 mm
+Body Firmware Version           : 1.100
+Lens Type                       : Olympus M.Zuiko Digital 17mm F1.8
+Lens Serial Number              : ABT219845
+Lens Firmware Version           : 1.100
+Max Aperture At Min Focal       : 1.8
+Max Aperture At Max Focal       : 1.8
+Min Focal Length                : 17
+Max Focal Length                : 17
+Max Aperture                    : 1.8
+Lens Properties                 : 0x4100
+Extender                        : None
+Extender Serial Number          : 
+Extender Model                  : 
+Extender Firmware Version       : 0
+Conversion Lens                 : 
+Flash Type                      : None
+Flash Model                     : None
+Flash Firmware Version          : 0
+Flash Serial Number             : 
+Camera Settings Version         : 0100
+Preview Image Valid             : Yes
+Preview Image Start             : 8216064
+Preview Image Length            : 412021
+AE Lock                         : Off
+Metering Mode                   : ESP
+Exposure Shift                  : 0
+Macro Mode                      : Off
+Focus Mode                      : Single AF; S-AF
+Focus Process                   : AF Not Used; 0
+AF Search                       : Not Ready
+AF Areas                        : none
+AF Point Selected               : n/a
+AF Fine Tune                    : Off
+AF Fine Tune Adj                : 0 0 0
+Focus Bracket Step Size         : 0
+AI Subject Tracking Mode        : Off
+AF Frame Size                   : 640 480
+AF Focus Area                   : 0 0 0 0
+AF Selected Area                : 213 231 16 18
+Subject Detect Frame Size       : 640 480
+Subject Detect Area             : 0 0 0 0
+Subject Detect Detail           : 0 0 0 0
+Subject Detect Status           : No Subject or Face Detected
+Flash Mode                      : Fill-in, Red-eye
+Flash Exposure Comp             : 0
+Flash Remote Control            : Off
+Flash Control Mode              : Off; 0; 0; 0
+Flash Intensity                 : n/a (x4)
+Manual Flash Strength           : n/a (x4)
+White Balance 2                 : Auto
+White Balance Temperature       : Auto
+White Balance Bracket           : 0 0
+Custom Saturation               : 0 (min -5, max 5)
+Modified Saturation             : Off
+Contrast Setting                : 0 (min -5, max 5)
+Sharpness Setting               : 0 (min -5, max 5)
+Scene Mode                      : Standard
+Noise Reduction                 : Auto
+Distortion Correction           : Off
+Shading Compensation            : Off
+Compression Factor              : 4
+Gradation                       : Normal; User-Selected
+Picture Mode                    : Monochrome Profile 2; 2
+Picture Mode Saturation         : 0 (min -2, max 2)
+Picture Mode Contrast           : 0 (min -2, max 2)
+Picture Mode Sharpness          : 0 (min -2, max 2)
+Picture Mode BW Filter          : n/a
+Picture Mode Tone               : n/a
+Noise Filter                    : Standard
+Art Filter                      : Off; 0; 0; 0
+Picture Mode Effect             : Standard
+Tone Level                      : Highlights; 6; -7; 7; Shadows; -6; -7; 7; Midtones; 0; -7; 7; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0
+Art Filter Effect               : Off; 0; 0; Partial Color 0; No Effect; 0; No Color Filter; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0
+Color Creator Effect            : Color 0; 0; 29; Strength 0; -4; 3
+Monochrome Profile Settings     : Red Filter; 0; 8; Strength 3; 0; 3
+Film Grain Effect               : Off
+Color Profile Settings          : Min -5; Max 5; Yellow 0; Orange 0; Orange-red 0; Red 0; Magenta 0; Violet 0; Blue 0; Blue-cyan 0; Cyan 0; Green-cyan 0; Green 0; Yellow-green 0
+Monochrome Vignetting           : 0
+Monochrome Color                : Normal
+Drive Mode                      : Single Shot; Mechanical shutter
+Panorama Mode                   : Off
+Image Stabilization             : On, S-IS Auto
+Stacked Image                   : No
+ISO Auto Settings               : 200; 6400
+Manometer Pressure              : 0 kPa
+Manometer Reading               : -999.9 m, -999.9 ft
+Extended WB Detect              : Off
+Roll Angle                      : -0.4
+Pitch Angle                     : 2.2
+Date Time UTC                   : 2026:04:07 17:55:52
+Raw Dev Version                 : 0100
+Raw Dev Exposure Bias Value     : 0
+Raw Dev White Balance Value     : 0
+Raw Dev WB Fine Adjustment      : 0
+Raw Dev Gray Point              : 0 0 0
+Raw Dev Saturation Emphasis     : 0 0 0
+Raw Dev Memory Color Emphasis   : 0
+Raw Dev Contrast Value          : 0 0 0
+Raw Dev Sharpness Value         : 0 0 0
+Raw Dev Color Space             : sRGB
+Raw Dev Engine                  : High Speed
+Raw Dev Noise Reduction         : (none)
+Raw Dev Edit Status             : Original
+Raw Dev Settings                : (none)
+Image Processing Version        : 0112
+WB RB Levels                    : 600 408 256 256
+Color Matrix                    : 648 -486 94 264 138 -146 358 -208 106
+Black Level 2                   : 255 255 255 255
+Gain Base                       : 256
+Crop Left                       : 12 0
+Crop Top                        : 12 0
+Crop Width                      : 5184
+Crop Height                     : 3888
+Sensor Calibration              : 4095 281
+Noise Reduction 2               : (none)
+Distortion Correction 2         : Off
+Shading Compensation 2          : Off
+Multiple Exposure Mode          : Off; 1
+Aspect Ratio                    : 4:3
+Aspect Frame                    : 0 0 5183 3887
+Faces Detected                  : 0 0 0
+Face Detect Area                : (Binary data 191 bytes, use -b option to extract)
+Max Faces                       : 8 8 0
+Face Detect Frame Size          : 0 0 0 0 0 0
+Face Detect Frame Crop          : 0 0 0 0 0 0 0 0 0 0 0 0
+Camera Temperature              : 29
+Keystone Compensation           : Off
+GND Filter Type                 : High
+Focus Info Version              : 0100
+Scene Detect                    : 0
+Zoom Step Count                 : 0
+Focus Step Count                : 902
+Focus Step Infinity             : 861
+Focus Step Near                 : 1606
+Focus Distance                  : 4.77 m
+AF Point                        : 0
+AF Point Details                : No Subject Detection; Face Priority; Normal AF; No Eye-AF; Face Detection; No MF; AF Priority; No Object found; S-AF
+CAF Sensitivity                 : 0
+External Flash                  : Off
+External Flash Bounce           : Bounce or Off
+External Flash Zoom             : 0
+Internal Flash                  : Off
+Manual Flash                    : Off
+Macro LED                       : Off
+Sensor Temperature              : 27 27 0 C
+Anti Shock Waiting Time         : 0
+User Comment                    : 
+Ambient Temperature             : -0 C
+Pressure                        : 0
+Water Depth                     : -0
+Acceleration                    : 0
+Flashpix Version                : 0100
+Color Space                     : sRGB
+Exif Image Width                : 5184
+Exif Image Height               : 3888
+Interoperability Index          : R98 - DCF basic file (sRGB)
+Interoperability Version        : 0100
+File Source                     : Digital Camera
+Custom Rendered                 : Custom
+Exposure Mode                   : Manual
+White Balance                   : Auto
+Digital Zoom Ratio              : 1
+Scene Capture Type              : Standard
+Gain Control                    : Low gain up
+Contrast                        : Normal
+Saturation                      : Normal
+Sharpness                       : Normal
+Lens Info                       : 17mm f/1.8
+Lens Model                      : OLYMPUS M.17mm F1.8
+GPS Version ID                  : 2.4.0.0
+Compression                     : JPEG (old-style)
+Thumbnail Offset                : 25344
+Thumbnail Length                : 8992
+Rating                          : 0
+Image Width                     : 5184
+Image Height                    : 3888
+Encoding Process                : Baseline DCT, Huffman coding
+Bits Per Sample                 : 8
+Color Components                : 3
+Y Cb Cr Sub Sampling            : YCbCr4:2:2 (2 1)
+Aperture                        : 8.0
+Blue Balance                    : 1.59375
+Image Size                      : 5184x3888
+Megapixels                      : 20.2
+Preview Image                   : (Binary data 412021 bytes, use -b option to extract)
+Red Balance                     : 2.34375
+Scale Factor To 35 mm Equivalent: 2.0
+Shutter Speed                   : 1/800
+Create Date                     : 2026:04:07 12:55:52-05:00
+Date/Time Original              : 2026:04:07 12:55:52-05:00
+Modify Date                     : 2026:04:07 12:55:52-05:00
+Thumbnail Image                 : (Binary data 8992 bytes, use -b option to extract)
+Extender Status                 : Not attached
+Circle Of Confusion             : 0.015 mm
+Depth Of Field                  : inf (1.60 m - inf)
+Field Of View                   : 55.6 deg (5.02 m)
+Focal Length 35mm Equiv         : 17.0 mm (35 mm equivalent: 34.1 mm)
+Hyperfocal Distance             : 2.41 m
+Lens ID                         : Olympus M.Zuiko Digital 17mm F1.8
+Light Value                     : 14.0

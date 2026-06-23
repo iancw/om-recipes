@@ -10,6 +10,7 @@ import { Dialog, DialogContent } from "../components/ui/dialog.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select.jsx";
 import { cn } from "../lib/cn.js";
+import { RECIPE_TYPE_FILTER_VALUES } from "../lib/recipe-data.js";
 import {
   buildRecipeSearchParams,
   clearRecipeSearchParams,
@@ -91,6 +92,7 @@ export default function Page() {
   const [selectedRecipeIndex, setSelectedRecipeIndex] = useState(null);
   const [onlyMine, setOnlyMine] = useState(false);
   const [onlySaved, setOnlySaved] = useState(false);
+  const [recipeType, setRecipeType] = useState(RECIPE_TYPE_FILTER_VALUES.ALL);
   const [sortBy, setSortBy] = useState(DEFAULT_RECIPE_SORT);
   const [selectedImageOption, setSelectedImageOption] = useState(SAMPLE_IMAGE_SELECTION);
   const hasLoadedInitialResults = useRef(false);
@@ -104,6 +106,7 @@ export default function Page() {
     query: "",
     onlyMine: false,
     onlySaved: false,
+    recipeType: RECIPE_TYPE_FILTER_VALUES.ALL,
     sortBy: DEFAULT_RECIPE_SORT
   });
   const activeResetRequestRef = useRef(null);
@@ -142,6 +145,7 @@ export default function Page() {
         q: searchQuery,
         onlyMine: Boolean(filters.onlyMine),
         onlySaved: Boolean(filters.onlySaved),
+        recipeType: filters.recipeType ?? RECIPE_TYPE_FILTER_VALUES.ALL,
         sortBy: filters.sortBy ?? DEFAULT_RECIPE_SORT
       }),
     []
@@ -157,6 +161,7 @@ export default function Page() {
         query: searchQuery,
         onlyMine: Boolean(filters.onlyMine),
         onlySaved: Boolean(filters.onlySaved),
+        recipeType: filters.recipeType ?? RECIPE_TYPE_FILTER_VALUES.ALL,
         sortBy: filters.sortBy ?? DEFAULT_RECIPE_SORT
       };
       if (activeResetRequestRef.current) {
@@ -180,6 +185,9 @@ export default function Page() {
       params.set('q', searchQuery);
       if (filters.onlyMine) params.set('onlyMine', '1');
       if (filters.onlySaved) params.set('onlySaved', '1');
+      if (filters.recipeType && filters.recipeType !== RECIPE_TYPE_FILTER_VALUES.ALL) {
+        params.set('type', filters.recipeType);
+      }
       params.set('sort', filters.sortBy ?? DEFAULT_RECIPE_SORT);
       params.set('limit', String(PAGE_SIZE));
       params.set('offset', String(offset));
@@ -227,6 +235,7 @@ export default function Page() {
       query: currentQuery,
       onlyMine: currentOnlyMine,
       onlySaved: currentOnlySaved,
+      recipeType: currentRecipeType,
       sortBy: currentSortBy
     } = currentSearchRef.current;
 
@@ -235,6 +244,7 @@ export default function Page() {
       filters: {
         onlyMine: currentOnlyMine,
         onlySaved: currentOnlySaved,
+        recipeType: currentRecipeType,
         sortBy: currentSortBy
       },
       offset: resultsRef.current.length,
@@ -340,6 +350,7 @@ export default function Page() {
     startSearch("", {
       onlyMine: false,
       onlySaved: false,
+      recipeType: RECIPE_TYPE_FILTER_VALUES.ALL,
       sortBy: DEFAULT_RECIPE_SORT
     });
     hasLoadedInitialResults.current = true;
@@ -347,8 +358,8 @@ export default function Page() {
 
   useEffect(() => {
     if (!hasLoadedInitialResults.current) return;
-    startSearch(queryRef.current, { onlyMine, onlySaved, sortBy });
-  }, [onlyMine, onlySaved, sortBy, startSearch]);
+    startSearch(queryRef.current, { onlyMine, onlySaved, recipeType, sortBy });
+  }, [onlyMine, onlySaved, recipeType, sortBy, startSearch]);
 
   useEffect(() => {
     loadingRef.current = loading;
@@ -481,7 +492,7 @@ export default function Page() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    startSearch(query, { onlyMine, onlySaved, sortBy });
+    startSearch(query, { onlyMine, onlySaved, recipeType, sortBy });
   }
 
   return (
@@ -491,9 +502,9 @@ export default function Page() {
           <div className="space-y-5">
             <Badge>Recipe Library</Badge>
             <div className="space-y-3">
-              <h1 className="max-w-3xl">OM System Color Recipes</h1>
+              <h1 className="max-w-3xl">OM System Recipes</h1>
               <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
-                Discover and share color recipes for Olympus and OM System cameras.
+                Discover and share color and monochrome recipes for Olympus and OM System cameras.
               </p>
             </div>
           </div>
@@ -510,7 +521,7 @@ export default function Page() {
                     name="search"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search color recipes..."
+                    placeholder="Search recipes..."
                     className="flex-1"
                   />
                   <Button type="submit" className="sm:self-start">
@@ -587,6 +598,30 @@ export default function Page() {
                 </CardHeader>
                 <CardContent className="grid gap-5">
                   <div className="space-y-3">
+                    <div className="text-sm font-medium text-foreground">Recipe type</div>
+                    <div role="radiogroup" aria-labelledby="recipe-type-filter-label" className="flex flex-wrap gap-2">
+                      <span id="recipe-type-filter-label" className="sr-only">
+                        Recipe type filter
+                      </span>
+                      <TogglePill
+                        checked={recipeType === RECIPE_TYPE_FILTER_VALUES.ALL}
+                        label="All types"
+                        onClick={() => setRecipeType(RECIPE_TYPE_FILTER_VALUES.ALL)}
+                      />
+                      <TogglePill
+                        checked={recipeType === RECIPE_TYPE_FILTER_VALUES.COLOR}
+                        label="Color"
+                        onClick={() => setRecipeType(RECIPE_TYPE_FILTER_VALUES.COLOR)}
+                      />
+                      <TogglePill
+                        checked={recipeType === RECIPE_TYPE_FILTER_VALUES.MONO}
+                        label="Monochrome"
+                        onClick={() => setRecipeType(RECIPE_TYPE_FILTER_VALUES.MONO)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium text-foreground">Library</div>
                     <div role="radiogroup" aria-labelledby="recipe-filter-group-label" className="flex flex-wrap gap-2">
                       <span id="recipe-filter-group-label" className="sr-only">
                         Recipe filter
@@ -690,7 +725,7 @@ export default function Page() {
       <div className="w-full">
         {loading ? <div className="text-center text-muted-foreground">Searching...</div> : null}
         {error ? <div className="text-center text-destructive">{error}</div> : null}
-        {!loading && !error && results.length === 0 && (query || onlyMine || onlySaved) ? (
+        {!loading && !error && results.length === 0 && (query || onlyMine || onlySaved || recipeType !== RECIPE_TYPE_FILTER_VALUES.ALL) ? (
           <Card className="mx-auto max-w-xl border-dashed bg-card/75">
             <CardContent className="p-8 text-center text-muted-foreground">No recipes found.</CardContent>
           </Card>

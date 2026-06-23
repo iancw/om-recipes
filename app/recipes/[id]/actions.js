@@ -1,7 +1,14 @@
 'use server';
 
 import { db } from '../../../db/index.ts';
-import { authors, recipeComparisonImages, recipeSampleImages, recipes } from '../../../db/schema.ts';
+import {
+    authors,
+    recipeColorSettings,
+    recipeComparisonImages,
+    recipeMonoSettings,
+    recipeSampleImages,
+    recipes
+} from '../../../db/schema.ts';
 import { and, eq, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -12,6 +19,9 @@ import {
     computeRecipeFingerprint,
     computeColorFingerprint,
     computeColorToneFingerprint,
+    computeMonoFingerprint,
+    computeMonoNoWbFingerprint,
+    computeMonoToneFingerprint,
     computeNoWbFingerprint
 } from '../../../lib/recipeFingerprint.js';
 import { deleteOrphanedImagesByIds } from '../../../lib/oci/deleteOrphanedImages.js';
@@ -36,6 +46,124 @@ function normalizeOptionalUrl(value) {
     }
 
     return parsed.toString();
+}
+
+function getRecipeTypeConfig(recipeType) {
+    if (recipeType === 'MONO') {
+        return {
+            recipeType: 'MONO',
+            settingsTable: recipeMonoSettings,
+            selectShape: {
+                monochromeProfile: recipeMonoSettings.monochromeProfile,
+                monochromeColor: recipeMonoSettings.monochromeColor,
+                monochromeColorStrength: recipeMonoSettings.monochromeColorStrength,
+                filmGrain: recipeMonoSettings.filmGrain,
+                filmHue: recipeMonoSettings.filmHue,
+                monochromeVignetting: recipeMonoSettings.monochromeVignetting,
+                contrast: recipeMonoSettings.contrast,
+                sharpness: recipeMonoSettings.sharpness,
+                highlights: recipeMonoSettings.highlights,
+                shadows: recipeMonoSettings.shadows,
+                midtones: recipeMonoSettings.midtones,
+                shadingEffect: recipeMonoSettings.shadingEffect,
+                exposureCompensation: recipeMonoSettings.exposureCompensation,
+                whiteBalance2: recipeMonoSettings.whiteBalance2,
+                whiteBalanceTemperature: recipeMonoSettings.whiteBalanceTemperature,
+                whiteBalanceAmberOffset: recipeMonoSettings.whiteBalanceAmberOffset,
+                whiteBalanceGreenOffset: recipeMonoSettings.whiteBalanceGreenOffset
+            },
+            computeFingerprints(settings) {
+                return {
+                    recipeFingerprint: computeRecipeFingerprint(settings),
+                    genericFingerprint: computeMonoFingerprint(settings),
+                    genericToneFingerprint: computeMonoToneFingerprint(settings),
+                    genericNoWbFingerprint: computeMonoNoWbFingerprint(settings),
+                    childFingerprintValues: {
+                        recipeFingerprint: computeRecipeFingerprint(settings),
+                        monoFingerprint: computeMonoFingerprint(settings),
+                        monoToneFingerprint: computeMonoToneFingerprint(settings),
+                        monoNoWbFingerprint: computeMonoNoWbFingerprint(settings)
+                    }
+                };
+            }
+        };
+    }
+
+    return {
+        recipeType: 'COLOR',
+        settingsTable: recipeColorSettings,
+        selectShape: {
+            yellow: recipeColorSettings.yellow,
+            orange: recipeColorSettings.orange,
+            orangeRed: recipeColorSettings.orangeRed,
+            red: recipeColorSettings.red,
+            magenta: recipeColorSettings.magenta,
+            violet: recipeColorSettings.violet,
+            blue: recipeColorSettings.blue,
+            blueCyan: recipeColorSettings.blueCyan,
+            cyan: recipeColorSettings.cyan,
+            greenCyan: recipeColorSettings.greenCyan,
+            green: recipeColorSettings.green,
+            yellowGreen: recipeColorSettings.yellowGreen,
+            contrast: recipeColorSettings.contrast,
+            sharpness: recipeColorSettings.sharpness,
+            highlights: recipeColorSettings.highlights,
+            shadows: recipeColorSettings.shadows,
+            midtones: recipeColorSettings.midtones,
+            shadingEffect: recipeColorSettings.shadingEffect,
+            exposureCompensation: recipeColorSettings.exposureCompensation,
+            whiteBalance2: recipeColorSettings.whiteBalance2,
+            whiteBalanceTemperature: recipeColorSettings.whiteBalanceTemperature,
+            whiteBalanceAmberOffset: recipeColorSettings.whiteBalanceAmberOffset,
+            whiteBalanceGreenOffset: recipeColorSettings.whiteBalanceGreenOffset
+        },
+        computeFingerprints(settings) {
+            return {
+                recipeFingerprint: computeRecipeFingerprint(settings),
+                genericFingerprint: computeColorFingerprint(settings),
+                genericToneFingerprint: computeColorToneFingerprint(settings),
+                genericNoWbFingerprint: computeNoWbFingerprint(settings),
+                childFingerprintValues: {
+                    recipeFingerprint: computeRecipeFingerprint(settings),
+                    colorFingerprint: computeColorFingerprint(settings),
+                    colorToneFingerprint: computeColorToneFingerprint(settings),
+                    noWbFingerprint: computeNoWbFingerprint(settings)
+                }
+            };
+        }
+    };
+}
+
+function buildLegacyRecipeMirrorValues({ recipeType, settings, fingerprints }) {
+    return {
+        yellow: recipeType === 'COLOR' ? settings.yellow ?? null : null,
+        orange: recipeType === 'COLOR' ? settings.orange ?? null : null,
+        orangeRed: recipeType === 'COLOR' ? settings.orangeRed ?? null : null,
+        red: recipeType === 'COLOR' ? settings.red ?? null : null,
+        magenta: recipeType === 'COLOR' ? settings.magenta ?? null : null,
+        violet: recipeType === 'COLOR' ? settings.violet ?? null : null,
+        blue: recipeType === 'COLOR' ? settings.blue ?? null : null,
+        blueCyan: recipeType === 'COLOR' ? settings.blueCyan ?? null : null,
+        cyan: recipeType === 'COLOR' ? settings.cyan ?? null : null,
+        greenCyan: recipeType === 'COLOR' ? settings.greenCyan ?? null : null,
+        green: recipeType === 'COLOR' ? settings.green ?? null : null,
+        yellowGreen: recipeType === 'COLOR' ? settings.yellowGreen ?? null : null,
+        contrast: settings.contrast ?? null,
+        sharpness: settings.sharpness ?? null,
+        highlights: settings.highlights ?? null,
+        shadows: settings.shadows ?? null,
+        midtones: settings.midtones ?? null,
+        shadingEffect: settings.shadingEffect ?? 0,
+        exposureCompensation: settings.exposureCompensation ?? 0,
+        whiteBalance2: settings.whiteBalance2 ?? null,
+        whiteBalanceTemperature: settings.whiteBalanceTemperature ?? null,
+        whiteBalanceAmberOffset: settings.whiteBalanceAmberOffset ?? null,
+        whiteBalanceGreenOffset: settings.whiteBalanceGreenOffset ?? null,
+        recipeFingerprint: fingerprints.recipeFingerprint,
+        colorFingerprint: fingerprints.genericFingerprint,
+        colorToneFingerprint: fingerprints.genericToneFingerprint,
+        noWbFingerprint: fingerprints.genericNoWbFingerprint
+    };
 }
 
 export async function updateRecipeAction(formData) {
@@ -64,30 +192,7 @@ export async function updateRecipeAction(formData) {
             id: recipes.id,
             uuid: recipes.uuid,
             slug: recipes.slug,
-
-            yellow: recipes.yellow,
-            orange: recipes.orange,
-            orangeRed: recipes.orangeRed,
-            red: recipes.red,
-            magenta: recipes.magenta,
-            violet: recipes.violet,
-            blue: recipes.blue,
-            blueCyan: recipes.blueCyan,
-            cyan: recipes.cyan,
-            greenCyan: recipes.greenCyan,
-            green: recipes.green,
-            yellowGreen: recipes.yellowGreen,
-
-            contrast: recipes.contrast,
-            sharpness: recipes.sharpness,
-            highlights: recipes.highlights,
-            shadows: recipes.shadows,
-            midtones: recipes.midtones,
-
-            whiteBalance2: recipes.whiteBalance2,
-            whiteBalanceTemperature: recipes.whiteBalanceTemperature,
-            whiteBalanceAmberOffset: recipes.whiteBalanceAmberOffset,
-            whiteBalanceGreenOffset: recipes.whiteBalanceGreenOffset
+            type: recipes.type
         })
         .from(recipes)
         .where(and(eq(recipes.id, recipeId), inArray(recipes.authorId, authorIds)))
@@ -95,10 +200,28 @@ export async function updateRecipeAction(formData) {
 
     if (existing.length === 0) throw new Error('Not authorized');
 
-    const recipeFingerprint = computeRecipeFingerprint(existing[0]);
-    const colorFingerprint = computeColorFingerprint(existing[0]);
-    const colorToneFingerprint = computeColorToneFingerprint(existing[0]);
-    const noWbFingerprint = computeNoWbFingerprint(existing[0]);
+    const recipeType = existing[0].type;
+    const typeConfig = getRecipeTypeConfig(recipeType);
+    const settingsRows = await db
+        .select(typeConfig.selectShape)
+        .from(typeConfig.settingsTable)
+        .where(eq(typeConfig.settingsTable.recipeId, recipeId))
+        .limit(1);
+
+    if (settingsRows.length === 0) {
+        throw new Error('Recipe settings not found');
+    }
+
+    const fingerprintSource = {
+        recipeType,
+        ...settingsRows[0]
+    };
+    const fingerprints = typeConfig.computeFingerprints(fingerprintSource);
+
+    await db
+        .update(typeConfig.settingsTable)
+        .set(fingerprints.childFingerprintValues)
+        .where(eq(typeConfig.settingsTable.recipeId, recipeId));
 
     const updated = await db
         .update(recipes)
@@ -106,10 +229,11 @@ export async function updateRecipeAction(formData) {
             recipeName,
             description: isBlank(description) ? null : description,
             sourceUrl,
-            recipeFingerprint,
-            colorFingerprint,
-            colorToneFingerprint,
-            noWbFingerprint,
+            ...buildLegacyRecipeMirrorValues({
+                recipeType,
+                settings: settingsRows[0],
+                fingerprints
+            }),
             updatedAt: new Date()
         })
         .where(and(eq(recipes.id, recipeId), inArray(recipes.authorId, authorIds)))

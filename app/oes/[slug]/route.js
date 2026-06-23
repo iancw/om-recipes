@@ -1,8 +1,9 @@
 import { db } from '../../../db/index.ts';
-import { recipes } from '../../../db/schema.ts';
+import { recipeColorSettings, recipeMonoSettings, recipes } from '../../../db/schema.ts';
 import { eq } from 'drizzle-orm';
 
 import { makeOESXml } from '../../../lib/oes.js';
+import { getRecipeSelectFields, normalizeRecipeRow } from '../../../lib/recipe-data.js';
 
 function isBlank(v) {
     return v == null || String(v).trim() === '';
@@ -13,8 +14,7 @@ function stripOesExt(slugParam) {
     return s.toLowerCase().endsWith('.oes') ? s.slice(0, -4) : s;
 }
 
-export async function GET(request, { params }) {
-    const url = new URL(request.url);
+export async function GET(_request, { params }) {
     // When accessing /oes/<slug>.oes, this route is /oes/[slug] and the suffix is left in the pathname.
     // Example: pathname "/oes/foo.oes" => params.slug === "foo.oes" (in prod)
     // Turbopack dev can be quirky here, so we fall back to parsing the pathname.
@@ -27,37 +27,10 @@ export async function GET(request, { params }) {
     const slug = stripOesExt(resolvedParams.slug);
 
     const rows = await db
-        .select({
-            slug: recipes.slug,
-
-            yellow: recipes.yellow,
-            orange: recipes.orange,
-            orangeRed: recipes.orangeRed,
-            red: recipes.red,
-            magenta: recipes.magenta,
-            violet: recipes.violet,
-            blue: recipes.blue,
-            blueCyan: recipes.blueCyan,
-            cyan: recipes.cyan,
-            greenCyan: recipes.greenCyan,
-            green: recipes.green,
-            yellowGreen: recipes.yellowGreen,
-
-            contrast: recipes.contrast,
-            sharpness: recipes.sharpness,
-            highlights: recipes.highlights,
-            shadows: recipes.shadows,
-            midtones: recipes.midtones,
-
-            shadingEffect: recipes.shadingEffect,
-            exposureCompensation: recipes.exposureCompensation,
-
-            whiteBalance2: recipes.whiteBalance2,
-            whiteBalanceTemperature: recipes.whiteBalanceTemperature,
-            whiteBalanceAmberOffset: recipes.whiteBalanceAmberOffset,
-            whiteBalanceGreenOffset: recipes.whiteBalanceGreenOffset
-        })
+        .select(getRecipeSelectFields())
         .from(recipes)
+        .leftJoin(recipeColorSettings, eq(recipeColorSettings.recipeId, recipes.id))
+        .leftJoin(recipeMonoSettings, eq(recipeMonoSettings.recipeId, recipes.id))
         .where(eq(recipes.slug, slug))
         .limit(1);
 
@@ -65,7 +38,10 @@ export async function GET(request, { params }) {
         return new Response('Not Found', { status: 404 });
     }
 
-    const recipeSettings = rows[0];
+    const recipeSettings = normalizeRecipeRow(rows[0]);
+    if (recipeSettings.type === 'MONO') {
+        return new Response('Monochrome recipes do not support OES downloads yet.', { status: 409 });
+    }
     const xml = makeOESXml(recipeSettings);
 
     return new Response(xml, {

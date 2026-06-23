@@ -3,7 +3,15 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '../../../lib/auth.js';
 import { db } from '../../../db/index.ts';
-import { authors, images, recipeComparisonImages, recipeSampleImages, recipes } from '../../../db/schema.ts';
+import {
+    authors,
+    images,
+    recipeColorSettings,
+    recipeComparisonImages,
+    recipeMonoSettings,
+    recipeSampleImages,
+    recipes
+} from '../../../db/schema.ts';
 import { and, asc, eq, ilike, ne, or, sql } from 'drizzle-orm';
 import RecipeCard from '../../../components/recipe-card.jsx';
 import SampleGallery from '../../../components/SampleGallery.jsx';
@@ -16,6 +24,7 @@ import {
     updateRecipeAction
 } from './actions';
 import { getSavedRecipeIdsForUser } from '../../../lib/recipe-saves.js';
+import { getRecipeSelectFields, normalizeRecipeRow } from '../../../lib/recipe-data.js';
 import { hydrateRecipeImageRecord } from '../../../lib/recipe-image-assets.js';
 import { getRecipePath, isUuidLike } from '../../../lib/recipe-url.js';
 import { getEquivalentWhiteBalance } from '../../../lib/whiteBalanceEquivalence.js';
@@ -26,59 +35,24 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
     // Detect UUID format to avoid a Postgres type error when the param is a slug.
     const isUuid = isUuidLike(v);
     const rows = await db
-        .select({
-            id: recipes.id,
-            uuid: recipes.uuid,
-            slug: recipes.slug,
-            recipeName: recipes.recipeName,
-            authorName: recipes.authorName,
-            description: recipes.description,
-            sourceUrl: recipes.sourceUrl,
-
-            yellow: recipes.yellow,
-            orange: recipes.orange,
-            orangeRed: recipes.orangeRed,
-            red: recipes.red,
-            magenta: recipes.magenta,
-            violet: recipes.violet,
-            blue: recipes.blue,
-            blueCyan: recipes.blueCyan,
-            cyan: recipes.cyan,
-            greenCyan: recipes.greenCyan,
-            green: recipes.green,
-            yellowGreen: recipes.yellowGreen,
-
-            contrast: recipes.contrast,
-            sharpness: recipes.sharpness,
-            highlights: recipes.highlights,
-            shadows: recipes.shadows,
-            midtones: recipes.midtones,
-
-            shadingEffect: recipes.shadingEffect,
-            exposureCompensation: recipes.exposureCompensation,
-
-            whiteBalance2: recipes.whiteBalance2,
-            whiteBalanceTemperature: recipes.whiteBalanceTemperature,
-            whiteBalanceAmberOffset: recipes.whiteBalanceAmberOffset,
-            whiteBalanceGreenOffset: recipes.whiteBalanceGreenOffset,
-
-            authorId: recipes.authorId,
-            authorSocial: {
-                instagram: authors.instagramLink,
-                flickr: authors.flickrLink,
-                website: authors.website,
-                kofi: authors.kofiLink
-            }
-        })
+        .select(
+            getRecipeSelectFields({
+                includeAuthorId: true,
+                includeAuthorSocial: true,
+                authorTable: authors
+            })
+        )
         .from(recipes)
         .leftJoin(authors, eq(authors.id, recipes.authorId))
+        .leftJoin(recipeColorSettings, eq(recipeColorSettings.recipeId, recipes.id))
+        .leftJoin(recipeMonoSettings, eq(recipeMonoSettings.recipeId, recipes.id))
         // Avoid generating a query with empty parameters which can surface as
         // "params: ,,1" in neon/drizzle errors when the route param is missing.
         .where(isUuid ? or(eq(recipes.slug, v), eq(recipes.uuid, v)) : eq(recipes.slug, v))
         .limit(1);
 
     if (rows.length === 0) return null;
-    const base = rows[0];
+    const base = normalizeRecipeRow(rows[0]);
 
     const recipeId = base.id;
 
@@ -164,7 +138,7 @@ export async function generateMetadata({ params }) {
 
     const title = recipe.recipeName;
     const description = recipe.description?.trim()
-        || `Color recipe for OM System / Olympus cameras by ${recipe.authorName}.`;
+        || `${recipe.type === 'MONO' ? 'Monochrome' : 'Color'} recipe for OM System / Olympus cameras by ${recipe.authorName}.`;
 
     const primaryImage = recipe.sampleImages?.find((img) => img.isPrimary) ?? recipe.sampleImages?.[0] ?? null;
     const ogImageUrl = primaryImage?.assetUrls?.original ?? null;
@@ -191,32 +165,36 @@ async function getAuthedAuthorIds(userId = null) {
     return rows.map((row) => row.id);
 }
 
-async function getRelatedWhiteBalanceRecipes(recipeId, whiteBalance) {
+async function getRelatedWhiteBalanceRecipes(recipeId, whiteBalance, recipeType = null) {
     if (!Number.isFinite(Number(recipeId)) || whiteBalance?.key == null) return [];
 
     const offsetFilters = [
         sql`coalesce(${recipes.whiteBalanceAmberOffset}, 0) = ${whiteBalance.amberOffset}`,
         sql`coalesce(${recipes.whiteBalanceGreenOffset}, 0) = ${whiteBalance.greenOffset}`
     ];
+    const baseFilters = [
+        ne(recipes.id, recipeId),
+        ...(recipeType ? [eq(recipes.type, recipeType)] : [])
+    ];
 
     let whereClause = null;
 
     if (whiteBalance.type === 'temperature') {
         whereClause = and(
-            ne(recipes.id, recipeId),
+            ...baseFilters,
             eq(recipes.whiteBalanceTemperature, whiteBalance.temperature),
             ...offsetFilters
         );
     } else if (whiteBalance.type === 'auto') {
         whereClause = and(
-            ne(recipes.id, recipeId),
+            ...baseFilters,
             sql`${recipes.whiteBalanceTemperature} is null`,
             ilike(recipes.whiteBalance2, 'auto%'),
             ...offsetFilters
         );
     } else if (whiteBalance.type === 'preset') {
         whereClause = and(
-            ne(recipes.id, recipeId),
+            ...baseFilters,
             sql`${recipes.whiteBalanceTemperature} is null`,
             eq(recipes.whiteBalance2, whiteBalance.label),
             ...offsetFilters
@@ -252,7 +230,7 @@ export default async function Page({ params }) {
         permanentRedirect(getRecipePath(recipe));
     }
     const whiteBalance = getEquivalentWhiteBalance(recipe);
-    const relatedWhiteBalanceRecipes = await getRelatedWhiteBalanceRecipes(recipe.id, whiteBalance);
+    const relatedWhiteBalanceRecipes = await getRelatedWhiteBalanceRecipes(recipe.id, whiteBalance, recipe.type);
 
     const authedAuthorIds = await getAuthedAuthorIds(userId);
     const isOwner = authedAuthorIds.includes(recipe.authorId);
@@ -291,7 +269,6 @@ export default async function Page({ params }) {
                                 <h2 className="text-2xl">White Balance Compatibility</h2>
                                 <p className="text-sm leading-6 text-muted-foreground">
                                     Other recipes using the same effective white balance settings.
-                                    {' '}These recipes could share the same custom mode.
                                 </p>
                             </div>
                         </div>

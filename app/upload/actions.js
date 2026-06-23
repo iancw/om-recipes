@@ -1,7 +1,15 @@
 'use server';
 import { createHash, randomUUID } from 'node:crypto';
 import { db } from '../../db/index.ts';
-import { authors, images, recipeComparisonImages, recipeSampleImages, recipes } from '../../db/schema.ts';
+import {
+    authors,
+    images,
+    recipeColorSettings,
+    recipeComparisonImages,
+    recipeMonoSettings,
+    recipeSampleImages,
+    recipes
+} from '../../db/schema.ts';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import {
     getObjectStorageClientFromEnv,
@@ -18,6 +26,9 @@ import {
     computeRecipeFingerprint,
     computeColorFingerprint,
     computeColorToneFingerprint,
+    computeMonoFingerprint,
+    computeMonoNoWbFingerprint,
+    computeMonoToneFingerprint,
     computeNoWbFingerprint
 } from '../../lib/recipeFingerprint.js';
 import { buildRecipeImageAssetUrl } from '../../lib/recipe-image-assets.js';
@@ -199,6 +210,188 @@ async function uniqueRecipeSlug(base) {
         slug = `${base}-${i + 1}`;
     }
     throw new Error('Unable to generate a unique slug');
+}
+
+function normalizeRecipeType(recipeSettings) {
+    return String(recipeSettings?.recipeType ?? '').trim().toUpperCase() === 'MONO' ? 'MONO' : 'COLOR';
+}
+
+function getRecipeTypeConfig(recipeType) {
+    if (recipeType === 'MONO') {
+        return {
+            recipeType: 'MONO',
+            settingsTable: recipeMonoSettings,
+            recipeFingerprintColumn: recipeMonoSettings.recipeFingerprint,
+            partialFingerprintColumn: recipeMonoSettings.monoFingerprint,
+            toneFingerprintColumn: recipeMonoSettings.monoToneFingerprint,
+            noWbFingerprintColumn: recipeMonoSettings.monoNoWbFingerprint,
+            computeFingerprints(recipeSettings) {
+                return {
+                    recipeFingerprint: computeRecipeFingerprint(recipeSettings),
+                    partialFingerprint: computeMonoFingerprint(recipeSettings),
+                    toneFingerprint: computeMonoToneFingerprint(recipeSettings),
+                    noWbFingerprint: computeMonoNoWbFingerprint(recipeSettings)
+                };
+            },
+            buildSettingsValues({ recipeSettings, fingerprints }) {
+                return {
+                    monochromeProfile: recipeSettings.monochromeProfile ?? null,
+                    monochromeColor: recipeSettings.monochromeColor ?? null,
+                    monochromeColorStrength: recipeSettings.monochromeColorStrength ?? null,
+                    filmGrain: recipeSettings.filmGrain ?? null,
+                    filmHue: recipeSettings.filmHue ?? null,
+                    monochromeVignetting: recipeSettings.monochromeVignetting ?? null,
+                    contrast: recipeSettings.contrast ?? null,
+                    sharpness: recipeSettings.sharpness ?? null,
+                    highlights: recipeSettings.highlights ?? null,
+                    shadows: recipeSettings.shadows ?? null,
+                    midtones: recipeSettings.midtones ?? null,
+                    shadingEffect: recipeSettings.shadingEffect ?? 0,
+                    exposureCompensation: recipeSettings.exposureCompensation ?? 0,
+                    whiteBalance2: recipeSettings.whiteBalance2 ?? null,
+                    whiteBalanceTemperature: recipeSettings.whiteBalanceTemperature ?? null,
+                    whiteBalanceAmberOffset: recipeSettings.whiteBalanceAmberOffset ?? null,
+                    whiteBalanceGreenOffset: recipeSettings.whiteBalanceGreenOffset ?? null,
+                    recipeFingerprint: fingerprints.recipeFingerprint,
+                    monoFingerprint: fingerprints.partialFingerprint,
+                    monoToneFingerprint: fingerprints.toneFingerprint,
+                    monoNoWbFingerprint: fingerprints.noWbFingerprint
+                };
+            }
+        };
+    }
+
+    return {
+        recipeType: 'COLOR',
+        settingsTable: recipeColorSettings,
+        recipeFingerprintColumn: recipeColorSettings.recipeFingerprint,
+        partialFingerprintColumn: recipeColorSettings.colorFingerprint,
+        toneFingerprintColumn: recipeColorSettings.colorToneFingerprint,
+        noWbFingerprintColumn: recipeColorSettings.noWbFingerprint,
+        computeFingerprints(recipeSettings) {
+            return {
+                recipeFingerprint: computeRecipeFingerprint(recipeSettings),
+                partialFingerprint: computeColorFingerprint(recipeSettings),
+                toneFingerprint: computeColorToneFingerprint(recipeSettings),
+                noWbFingerprint: computeNoWbFingerprint(recipeSettings)
+            };
+        },
+        buildSettingsValues({ recipeSettings, fingerprints }) {
+            return {
+                yellow: recipeSettings.yellow ?? null,
+                orange: recipeSettings.orange ?? null,
+                orangeRed: recipeSettings.orangeRed ?? null,
+                red: recipeSettings.red ?? null,
+                magenta: recipeSettings.magenta ?? null,
+                violet: recipeSettings.violet ?? null,
+                blue: recipeSettings.blue ?? null,
+                blueCyan: recipeSettings.blueCyan ?? null,
+                cyan: recipeSettings.cyan ?? null,
+                greenCyan: recipeSettings.greenCyan ?? null,
+                green: recipeSettings.green ?? null,
+                yellowGreen: recipeSettings.yellowGreen ?? null,
+                contrast: recipeSettings.contrast ?? null,
+                sharpness: recipeSettings.sharpness ?? null,
+                highlights: recipeSettings.highlights ?? null,
+                shadows: recipeSettings.shadows ?? null,
+                midtones: recipeSettings.midtones ?? null,
+                shadingEffect: recipeSettings.shadingEffect ?? 0,
+                exposureCompensation: recipeSettings.exposureCompensation ?? 0,
+                whiteBalance2: recipeSettings.whiteBalance2 ?? null,
+                whiteBalanceTemperature: recipeSettings.whiteBalanceTemperature ?? null,
+                whiteBalanceAmberOffset: recipeSettings.whiteBalanceAmberOffset ?? null,
+                whiteBalanceGreenOffset: recipeSettings.whiteBalanceGreenOffset ?? null,
+                recipeFingerprint: fingerprints.recipeFingerprint,
+                colorFingerprint: fingerprints.partialFingerprint,
+                colorToneFingerprint: fingerprints.toneFingerprint,
+                noWbFingerprint: fingerprints.noWbFingerprint
+            };
+        }
+    };
+}
+
+function buildLegacyRecipeMirrorValues({ recipeType, recipeSettings, fingerprints }) {
+    return {
+        yellow: recipeType === 'COLOR' ? recipeSettings.yellow ?? null : null,
+        orange: recipeType === 'COLOR' ? recipeSettings.orange ?? null : null,
+        orangeRed: recipeType === 'COLOR' ? recipeSettings.orangeRed ?? null : null,
+        red: recipeType === 'COLOR' ? recipeSettings.red ?? null : null,
+        magenta: recipeType === 'COLOR' ? recipeSettings.magenta ?? null : null,
+        violet: recipeType === 'COLOR' ? recipeSettings.violet ?? null : null,
+        blue: recipeType === 'COLOR' ? recipeSettings.blue ?? null : null,
+        blueCyan: recipeType === 'COLOR' ? recipeSettings.blueCyan ?? null : null,
+        cyan: recipeType === 'COLOR' ? recipeSettings.cyan ?? null : null,
+        greenCyan: recipeType === 'COLOR' ? recipeSettings.greenCyan ?? null : null,
+        green: recipeType === 'COLOR' ? recipeSettings.green ?? null : null,
+        yellowGreen: recipeType === 'COLOR' ? recipeSettings.yellowGreen ?? null : null,
+        contrast: recipeSettings.contrast ?? null,
+        sharpness: recipeSettings.sharpness ?? null,
+        highlights: recipeSettings.highlights ?? null,
+        shadows: recipeSettings.shadows ?? null,
+        midtones: recipeSettings.midtones ?? null,
+        shadingEffect: recipeSettings.shadingEffect ?? 0,
+        exposureCompensation: recipeSettings.exposureCompensation ?? 0,
+        whiteBalance2: recipeSettings.whiteBalance2 ?? null,
+        whiteBalanceTemperature: recipeSettings.whiteBalanceTemperature ?? null,
+        whiteBalanceAmberOffset: recipeSettings.whiteBalanceAmberOffset ?? null,
+        whiteBalanceGreenOffset: recipeSettings.whiteBalanceGreenOffset ?? null,
+        recipeFingerprint: fingerprints.recipeFingerprint,
+        colorFingerprint: fingerprints.partialFingerprint,
+        colorToneFingerprint: fingerprints.toneFingerprint,
+        noWbFingerprint: fingerprints.noWbFingerprint
+    };
+}
+
+function buildRecipeCreationStatement({ recipeValues, settingsTable, settingsValues }) {
+    const recipeKeys = Object.keys(recipeValues);
+    const settingsKeys = Object.keys(settingsValues);
+    const recipeInsertColumns = recipeKeys.map((key) => sql.identifier(recipes[key].name));
+    const settingsInsertColumns = [sql.identifier(settingsTable.recipeId.name), ...settingsKeys.map((key) => sql.identifier(settingsTable[key].name))];
+    const statement = sql`
+        with inserted_recipe as (
+            insert into ${recipes} (
+                ${sql.join(recipeInsertColumns, sql`, `)}
+            )
+            values (
+                ${sql.join(recipeKeys.map((key) => sql`${recipeValues[key]}`), sql`, `)}
+            )
+            returning ${recipes.id}, ${recipes.uuid}, ${recipes.slug}
+        ),
+        inserted_settings as (
+            insert into ${settingsTable} (
+                ${sql.join(settingsInsertColumns, sql`, `)}
+            )
+            select
+                inserted_recipe.id,
+                ${sql.join(settingsKeys.map((key) => sql`${settingsValues[key]}`), sql`, `)}
+            from inserted_recipe
+        )
+        select inserted_recipe.id, inserted_recipe.uuid, inserted_recipe.slug
+        from inserted_recipe
+    `;
+
+    statement.__recipesTable = recipes;
+    statement.__settingsTable = settingsTable;
+    statement.__recipeValues = recipeValues;
+    statement.__settingsValues = settingsValues;
+
+    return statement;
+}
+
+async function createRecipeWithSettings({ recipeValues, settingsTable, settingsValues }) {
+    const result = await db.execute(
+        buildRecipeCreationStatement({
+            recipeValues,
+            settingsTable,
+            settingsValues
+        })
+    );
+    const rows = Array.isArray(result) ? result : Array.isArray(result?.rows) ? result.rows : [];
+    const inserted = rows[0];
+    if (!inserted?.id || !inserted?.slug) {
+        throw new Error('Failed to create recipe');
+    }
+    return inserted;
 }
 
 function inferImageExtension(file) {
@@ -437,9 +630,16 @@ export async function prepareRecipeUploadAction({ parameters }) {
             };
         }
 
-        // Enforce maker notes presence: require Color Profile Settings + Tone Level.
+        const recipeType = normalizeRecipeType(recipeSettings);
+        const typeConfig = getRecipeTypeConfig(recipeType);
+
+        // Enforce maker notes presence: require the type-appropriate profile settings + Tone Level.
         // These are necessary to produce a valid OM recipe match.
-        if (!recipeSettings?.hasColorProfileSettings) {
+        const hasRequiredProfileSettings =
+            recipeType === 'MONO'
+                ? recipeSettings?.hasMonochromeProfileSettings
+                : recipeSettings?.hasColorProfileSettings;
+        if (!hasRequiredProfileSettings) {
             return {
                 ok: false,
                 error: 'No recipe found. Upload straight out of camera JPGs from OM-3, Pen-F, or E-P7 cameras.'
@@ -478,11 +678,8 @@ export async function prepareRecipeUploadAction({ parameters }) {
         const authorId = authorRow.id;
         const authorUuid = authorRow.uuid;
 
-        const recipeFingerprint = computeRecipeFingerprint(recipeSettings);
-        const colorFingerprint = computeColorFingerprint(recipeSettings);
-        const colorToneFingerprint = computeColorToneFingerprint(recipeSettings);
-        const noWbFingerprint = computeNoWbFingerprint(recipeSettings);
-
+        const fingerprints = typeConfig.computeFingerprints(recipeSettings);
+        const recipeFingerprint = fingerprints.recipeFingerprint;
         let existingRecipe;
 
         if (explicitAttachRecipe) {
@@ -517,7 +714,8 @@ export async function prepareRecipeUploadAction({ parameters }) {
                     authorName: recipes.authorName
                 })
                 .from(recipes)
-                .where(eq(recipes.recipeFingerprint, recipeFingerprint))
+                .innerJoin(typeConfig.settingsTable, eq(typeConfig.settingsTable.recipeId, recipes.id))
+                .where(and(eq(recipes.type, recipeType), eq(typeConfig.recipeFingerprintColumn, recipeFingerprint)))
                 .limit(1);
         }
 
@@ -534,56 +732,31 @@ export async function prepareRecipeUploadAction({ parameters }) {
             const normalizedSourceUrl = normalizeOptionalUrl(sourceUrl);
             const baseSlug = `${slugify(author)}_${slugify(name)}`;
             createdSlug = await uniqueRecipeSlug(baseSlug);
-
-            // --- db writes
-            const recipeRow = await db
-                .insert(recipes)
-                .values({
+            const recipeRow = await createRecipeWithSettings({
+                recipeValues: {
                     authorId,
                     slug: createdSlug,
+                    type: recipeType,
                     recipeName: String(name),
                     authorName: String(author),
                     description: isBlank(notes) ? null : String(notes),
                     source: recipeSettings.source ?? null,
                     sourceUrl: normalizedSourceUrl,
-
-                    recipeFingerprint,
-                    colorFingerprint,
-                    colorToneFingerprint,
-                    noWbFingerprint,
-
-                    yellow: recipeSettings.yellow,
-                    orange: recipeSettings.orange,
-                    orangeRed: recipeSettings.orangeRed,
-                    red: recipeSettings.red,
-                    magenta: recipeSettings.magenta,
-                    violet: recipeSettings.violet,
-                    blue: recipeSettings.blue,
-                    blueCyan: recipeSettings.blueCyan,
-                    cyan: recipeSettings.cyan,
-                    greenCyan: recipeSettings.greenCyan,
-                    green: recipeSettings.green,
-                    yellowGreen: recipeSettings.yellowGreen,
-
-                    contrast: recipeSettings.contrast,
-                    sharpness: recipeSettings.sharpness,
-                    highlights: recipeSettings.highlights,
-                    shadows: recipeSettings.shadows,
-                    midtones: recipeSettings.midtones,
-
-                    // these aren’t currently parsed into recipeSettings; default 0
-                    shadingEffect: 0,
-                    exposureCompensation: 0,
-
-                    whiteBalance2: recipeSettings.whiteBalance2,
-                    whiteBalanceTemperature: recipeSettings.whiteBalanceTemperature,
-                    whiteBalanceAmberOffset: recipeSettings.whiteBalanceAmberOffset,
-                    whiteBalanceGreenOffset: recipeSettings.whiteBalanceGreenOffset
+                    ...buildLegacyRecipeMirrorValues({
+                        recipeType,
+                        recipeSettings,
+                        fingerprints
+                    })
+                },
+                settingsTable: typeConfig.settingsTable,
+                settingsValues: typeConfig.buildSettingsValues({
+                    recipeSettings,
+                    fingerprints
                 })
-                .returning({ id: recipes.id, uuid: recipes.uuid, slug: recipes.slug });
+            });
 
-            createdRecipeId = recipeRow[0].id;
-            createdRecipeUuid = recipeRow[0].uuid;
+            createdRecipeId = recipeRow.id;
+            createdRecipeUuid = recipeRow.uuid;
         }
 
         if (!createdRecipeId || !createdSlug) {
@@ -869,6 +1042,9 @@ export async function findRecipeMatchAction({ parameters }) {
         if (!recipeSettings) {
             return { ok: false, error: 'Recipe settings are required' };
         }
+        const recipeType = normalizeRecipeType(recipeSettings);
+        const typeConfig = getRecipeTypeConfig(recipeType);
+        const fingerprints = typeConfig.computeFingerprints(recipeSettings);
 
         const fields = {
             id: recipes.id,
@@ -878,11 +1054,19 @@ export async function findRecipeMatchAction({ parameters }) {
             authorName: recipes.authorName
         };
 
+        const matchQuery = (fingerprintColumn, fingerprintValue) =>
+            db
+                .select(fields)
+                .from(recipes)
+                .innerJoin(typeConfig.settingsTable, eq(typeConfig.settingsTable.recipeId, recipes.id))
+                .where(and(eq(recipes.type, recipeType), eq(fingerprintColumn, fingerprintValue)))
+                .limit(1);
+
         const [fullRows, noWbRows, colorToneRows, colorRows] = await Promise.all([
-            db.select(fields).from(recipes).where(eq(recipes.recipeFingerprint, computeRecipeFingerprint(recipeSettings))).limit(1),
-            db.select(fields).from(recipes).where(eq(recipes.noWbFingerprint, computeNoWbFingerprint(recipeSettings))).limit(1),
-            db.select(fields).from(recipes).where(eq(recipes.colorToneFingerprint, computeColorToneFingerprint(recipeSettings))).limit(1),
-            db.select(fields).from(recipes).where(eq(recipes.colorFingerprint, computeColorFingerprint(recipeSettings))).limit(1),
+            matchQuery(typeConfig.recipeFingerprintColumn, fingerprints.recipeFingerprint),
+            matchQuery(typeConfig.noWbFingerprintColumn, fingerprints.noWbFingerprint),
+            matchQuery(typeConfig.toneFingerprintColumn, fingerprints.toneFingerprint),
+            matchQuery(typeConfig.partialFingerprintColumn, fingerprints.partialFingerprint)
         ]);
 
         return {
@@ -890,7 +1074,7 @@ export async function findRecipeMatchAction({ parameters }) {
             full: fullRows[0] ?? null,
             noWb: noWbRows[0] ?? null,
             colorTone: colorToneRows[0] ?? null,
-            color: colorRows[0] ?? null,
+            color: colorRows[0] ?? null
         };
     } catch (e) {
         console.error(e);

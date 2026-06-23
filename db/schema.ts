@@ -3,6 +3,7 @@ import {
     boolean,
     index,
     integer,
+    pgEnum,
     pgTable,
     primaryKey,
     smallint,
@@ -19,6 +20,8 @@ import {
  * - `users` are first-party login identities (email + session-backed auth).
  * - `authors` are public recipe owners/profiles and may optionally belong to a user.
  */
+
+export const recipeTypeEnum = pgEnum('recipe_type', ['COLOR', 'MONO']);
 
 export const users = pgTable(
     'users',
@@ -185,6 +188,7 @@ export const recipes = pgTable(
             .references(() => authors.id, { onDelete: 'restrict' }),
 
         slug: varchar('slug', { length: 255 }).notNull(),
+        type: recipeTypeEnum('type').notNull().default('COLOR'),
 
         recipeName: text('recipe_name').notNull(),
         // Denormalized display name from the source schema/JSON.
@@ -193,6 +197,8 @@ export const recipes = pgTable(
         source: text('source'),
         sourceUrl: text('source_url'),
 
+        // Transitional: later tasks will move runtime reads/writes to the child settings tables.
+        // These legacy color/fingerprint columns stay on `recipes` only until that refactor lands.
         // Saturation wheel adjustments
         yellow: smallint('yellow'),
         orange: smallint('orange'),
@@ -241,12 +247,97 @@ export const recipes = pgTable(
     (t) => [
         uniqueIndex('recipes_uuid_unique').on(t.uuid),
         uniqueIndex('recipes_slug_unique').on(t.slug),
+        index('recipes_type_idx').on(t.type),
         index('recipes_recipe_fingerprint_idx').on(t.recipeFingerprint),
         index('recipes_color_fingerprint_idx').on(t.colorFingerprint),
         index('recipes_color_tone_fingerprint_idx').on(t.colorToneFingerprint),
         index('recipes_no_wb_fingerprint_idx').on(t.noWbFingerprint),
         index('recipes_recipe_name_idx').on(t.recipeName),
         index('recipes_author_id_idx').on(t.authorId)
+    ]
+);
+
+// Transitional destination for color-specific settings once runtime code stops reading legacy columns on `recipes`.
+export const recipeColorSettings = pgTable(
+    'recipe_color_settings',
+    {
+        id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+        recipeId: integer('recipe_id')
+            .notNull()
+            .references(() => recipes.id, { onDelete: 'cascade' }),
+        yellow: smallint('yellow'),
+        orange: smallint('orange'),
+        orangeRed: smallint('orange_red'),
+        red: smallint('red'),
+        magenta: smallint('magenta'),
+        violet: smallint('violet'),
+        blue: smallint('blue'),
+        blueCyan: smallint('blue_cyan'),
+        cyan: smallint('cyan'),
+        greenCyan: smallint('green_cyan'),
+        green: smallint('green'),
+        yellowGreen: smallint('yellow_green'),
+        contrast: smallint('contrast'),
+        sharpness: smallint('sharpness'),
+        highlights: smallint('highlights'),
+        shadows: smallint('shadows'),
+        midtones: smallint('midtones'),
+        shadingEffect: smallint('shading_effect').notNull().default(0),
+        exposureCompensation: smallint('exposure_compensation').notNull().default(0),
+        whiteBalance2: text('white_balance_2'),
+        whiteBalanceTemperature: integer('white_balance_temperature'),
+        whiteBalanceAmberOffset: smallint('white_balance_amber_offset'),
+        whiteBalanceGreenOffset: smallint('white_balance_green_offset'),
+        recipeFingerprint: text('recipe_fingerprint'),
+        colorFingerprint: text('color_fingerprint'),
+        colorToneFingerprint: text('color_tone_fingerprint'),
+        noWbFingerprint: text('no_wb_fingerprint')
+    },
+    (t) => [
+        uniqueIndex('recipe_color_settings_recipe_id_unique').on(t.recipeId),
+        index('recipe_color_settings_recipe_fingerprint_idx').on(t.recipeFingerprint),
+        index('recipe_color_settings_color_fingerprint_idx').on(t.colorFingerprint),
+        index('recipe_color_settings_color_tone_fingerprint_idx').on(t.colorToneFingerprint),
+        index('recipe_color_settings_no_wb_fingerprint_idx').on(t.noWbFingerprint)
+    ]
+);
+
+// Transitional destination for monochrome-specific settings keyed by the parent recipe row.
+export const recipeMonoSettings = pgTable(
+    'recipe_mono_settings',
+    {
+        id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+        recipeId: integer('recipe_id')
+            .notNull()
+            .references(() => recipes.id, { onDelete: 'cascade' }),
+        monochromeProfile: text('monochrome_profile'),
+        monochromeColor: text('monochrome_color'),
+        monochromeColorStrength: smallint('monochrome_color_strength'),
+        filmGrain: text('film_grain'),
+        filmHue: text('film_hue'),
+        monochromeVignetting: text('monochrome_vignetting'),
+        contrast: smallint('contrast'),
+        sharpness: smallint('sharpness'),
+        highlights: smallint('highlights'),
+        shadows: smallint('shadows'),
+        midtones: smallint('midtones'),
+        shadingEffect: smallint('shading_effect').notNull().default(0),
+        exposureCompensation: smallint('exposure_compensation').notNull().default(0),
+        whiteBalance2: text('white_balance_2'),
+        whiteBalanceTemperature: integer('white_balance_temperature'),
+        whiteBalanceAmberOffset: smallint('white_balance_amber_offset'),
+        whiteBalanceGreenOffset: smallint('white_balance_green_offset'),
+        recipeFingerprint: text('recipe_fingerprint'),
+        monoFingerprint: text('mono_fingerprint'),
+        monoToneFingerprint: text('mono_tone_fingerprint'),
+        monoNoWbFingerprint: text('mono_no_wb_fingerprint')
+    },
+    (t) => [
+        uniqueIndex('recipe_mono_settings_recipe_id_unique').on(t.recipeId),
+        index('recipe_mono_settings_recipe_fingerprint_idx').on(t.recipeFingerprint),
+        index('recipe_mono_settings_mono_fingerprint_idx').on(t.monoFingerprint),
+        index('recipe_mono_settings_mono_tone_fingerprint_idx').on(t.monoToneFingerprint),
+        index('recipe_mono_settings_mono_no_wb_fingerprint_idx').on(t.monoNoWbFingerprint)
     ]
 );
 
@@ -362,9 +453,31 @@ export const recipesRelations = relations(recipes, ({ one, many }) => ({
         fields: [recipes.authorId],
         references: [authors.id]
     }),
+    colorSettings: one(recipeColorSettings, {
+        fields: [recipes.id],
+        references: [recipeColorSettings.recipeId]
+    }),
+    monoSettings: one(recipeMonoSettings, {
+        fields: [recipes.id],
+        references: [recipeMonoSettings.recipeId]
+    }),
     sampleImages: many(recipeSampleImages),
     comparisonImages: many(recipeComparisonImages),
     savedByUsers: many(savedRecipes)
+}));
+
+export const recipeColorSettingsRelations = relations(recipeColorSettings, ({ one }) => ({
+    recipe: one(recipes, {
+        fields: [recipeColorSettings.recipeId],
+        references: [recipes.id]
+    })
+}));
+
+export const recipeMonoSettingsRelations = relations(recipeMonoSettings, ({ one }) => ({
+    recipe: one(recipes, {
+        fields: [recipeMonoSettings.recipeId],
+        references: [recipes.id]
+    })
 }));
 
 export const recipeSampleImagesRelations = relations(recipeSampleImages, ({ one }) => ({

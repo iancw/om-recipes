@@ -1,7 +1,22 @@
 import { db } from '../../../db/index.ts';
-import { authors, images, recipeComparisonImages, recipeSampleImages, recipes, savedRecipes } from '../../../db/schema.ts';
+import {
+  authors,
+  images,
+  recipeColorSettings,
+  recipeComparisonImages,
+  recipeMonoSettings,
+  recipeSampleImages,
+  recipes,
+  savedRecipes
+} from '../../../db/schema.ts';
 import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { getSession } from '../../../lib/auth.js';
+import {
+  getRecipeSelectFields,
+  normalizeRecipeRow,
+  normalizeRecipeTypeFilter,
+  RECIPE_TYPE_FILTER_VALUES
+} from '../../../lib/recipe-data.js';
 import { hydrateRecipeImageRecord } from '../../../lib/recipe-image-assets.js';
 import { normalizeRecipeSort, RECIPE_SORT_VALUES } from '../../../lib/recipe-sort.js';
 import { getSavedRecipeIdsForUser } from '../../../lib/recipe-saves.js';
@@ -9,6 +24,7 @@ import { getSavedRecipeIdsForUser } from '../../../lib/recipe-saves.js';
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const query = (searchParams.get('q') || '').toLowerCase();
+  const recipeType = normalizeRecipeTypeFilter(searchParams.get('type'));
   const onlyMine = searchParams.get('onlyMine') === '1';
   const onlySaved = searchParams.get('onlySaved') === '1';
   const sortBy = normalizeRecipeSort(searchParams.get('sort'));
@@ -37,6 +53,9 @@ export async function GET(request) {
         ilike(recipes.description, `%${query}%`)
       )
     );
+  }
+  if (recipeType !== RECIPE_TYPE_FILTER_VALUES.ALL) {
+    filters.push(eq(recipes.type, recipeType));
   }
   if (onlyMine) {
     filters.push(eq(authors.userId, userId));
@@ -74,49 +93,11 @@ export async function GET(request) {
   //   comparisonImages: [{ id, smallUrl, fullSizeUrl, dimensions, camera, lens, label? }],
   //   sampleImages: [{ id, smallUrl, fullSizeUrl, dimensions, camera, lens }]
   // }
-  const recipeFields = {
-    id: recipes.id,
-    uuid: recipes.uuid,
-    slug: recipes.slug,
-    recipeName: recipes.recipeName,
-    authorName: recipes.authorName,
-    description: recipes.description,
-    sourceUrl: recipes.sourceUrl,
-
-    yellow: recipes.yellow,
-    orange: recipes.orange,
-    orangeRed: recipes.orangeRed,
-    red: recipes.red,
-    magenta: recipes.magenta,
-    violet: recipes.violet,
-    blue: recipes.blue,
-    blueCyan: recipes.blueCyan,
-    cyan: recipes.cyan,
-    greenCyan: recipes.greenCyan,
-    green: recipes.green,
-    yellowGreen: recipes.yellowGreen,
-
-    contrast: recipes.contrast,
-    sharpness: recipes.sharpness,
-    highlights: recipes.highlights,
-    shadows: recipes.shadows,
-    midtones: recipes.midtones,
-
-    shadingEffect: recipes.shadingEffect,
-    exposureCompensation: recipes.exposureCompensation,
-
-    whiteBalance2: recipes.whiteBalance2,
-    whiteBalanceTemperature: recipes.whiteBalanceTemperature,
-    whiteBalanceAmberOffset: recipes.whiteBalanceAmberOffset,
-    whiteBalanceGreenOffset: recipes.whiteBalanceGreenOffset,
-    createdAt: recipes.createdAt,
-    authorSocial: {
-      instagram: authors.instagramLink,
-      flickr: authors.flickrLink,
-      website: authors.website,
-      kofi: authors.kofiLink
-    }
-  };
+  const recipeFields = getRecipeSelectFields({
+    includeCreatedAt: true,
+    includeAuthorSocial: true,
+    authorTable: authors
+  });
 
   const baseRecipes = await db
     .select({
@@ -125,9 +106,11 @@ export async function GET(request) {
     })
     .from(recipes)
     .leftJoin(authors, eq(authors.id, recipes.authorId))
+    .leftJoin(recipeColorSettings, eq(recipeColorSettings.recipeId, recipes.id))
+    .leftJoin(recipeMonoSettings, eq(recipeMonoSettings.recipeId, recipes.id))
     .leftJoin(savedRecipes, eq(savedRecipes.recipeId, recipes.id))
     .where(where)
-    .groupBy(recipes.id, authors.id)
+    .groupBy(recipes.id, authors.id, recipeColorSettings.id, recipeMonoSettings.id)
     .orderBy(...orderBy)
     .limit(fetchLimit)
     .offset(offset);
@@ -241,8 +224,9 @@ export async function GET(request) {
 
   const results = pageRecipes.map((r) => {
     const { saveCount, ...recipe } = r;
+    const normalizedRecipe = normalizeRecipeRow(recipe);
     return {
-      ...recipe,
+      ...normalizedRecipe,
       viewerIsLoggedIn: userId != null,
       isSaved: savedRecipeIds.has(r.id),
       comparisonImages: comparisonByRecipeId.get(r.id) ?? [],

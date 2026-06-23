@@ -1,15 +1,34 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { recipeColorSettings, recipeMonoSettings, recipes } from '../db/schema.ts';
 
 let selectMock;
 let insertMock;
+let executeMock;
+let updateMock;
 let createParMock;
-let computeFingerprintMock;
+let computeRecipeFingerprintMock;
+let computeColorFingerprintMock;
+let computeColorToneFingerprintMock;
+let computeNoWbFingerprintMock;
+let computeMonoFingerprintMock;
+let computeMonoToneFingerprintMock;
+let computeMonoNoWbFingerprintMock;
 let requireUserMock;
 let findOrCreateAuthorForUserMock;
+let revalidatePathMock;
+let redirectMock;
+let deleteOrphanedImagesByIdsMock;
 
 let selectResults = [];
 let insertHandlers = [];
+let executeResults = [];
+let updateHandlers = [];
+let selectChains = [];
+let capturedRecipeValues = null;
+let capturedRecipeSettingsValues = null;
 let capturedImageValues = null;
+let capturedChildSyncValues = null;
+let capturedParentSyncValues = null;
 let capturedWhereClauses = [];
 const originalDisableUploadsEnv = process.env.NEXT_PUBLIC_DISABLE_UPLOADS;
 
@@ -22,12 +41,93 @@ const makeSelectChain = (result) => {
         }),
         innerJoin: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
-        limit: vi.fn(() => Promise.resolve(result)),
-        then: (onFulfilled, onRejected) => Promise.resolve(result).then(onFulfilled, onRejected)
+        limit: vi.fn(() => Promise.resolve(typeof result === 'function' ? result(chain) : result)),
+        then: (onFulfilled, onRejected) =>
+            Promise.resolve(typeof result === 'function' ? result(chain) : result).then(onFulfilled, onRejected)
     };
     return chain;
 };
 
+function makeColorRecipeSettings(overrides = {}) {
+    return {
+        recipeType: 'COLOR',
+        hasColorProfileSettings: true,
+        hasToneLevel: true,
+        yellow: 0,
+        orange: 0,
+        orangeRed: 0,
+        red: 0,
+        magenta: 0,
+        violet: 0,
+        blue: 0,
+        blueCyan: 0,
+        cyan: 0,
+        greenCyan: 0,
+        green: 0,
+        yellowGreen: 0,
+        contrast: 0,
+        sharpness: 0,
+        highlights: 0,
+        shadows: 0,
+        midtones: 0,
+        whiteBalance2: 'Custom WB 1',
+        whiteBalanceTemperature: 5200,
+        whiteBalanceAmberOffset: 0,
+        whiteBalanceGreenOffset: 0,
+        ...overrides
+    };
+}
+
+function makeMonoRecipeSettings(overrides = {}) {
+    return {
+        recipeType: 'MONO',
+        hasColorProfileSettings: false,
+        hasMonochromeProfileSettings: true,
+        hasToneLevel: true,
+        monochromeProfile: 'MONOTONE',
+        monochromeColor: 'Yellow',
+        monochromeColorStrength: 1,
+        filmGrain: 'Low',
+        filmHue: 'Warm',
+        monochromeVignetting: 'Low',
+        contrast: 0,
+        sharpness: 0,
+        highlights: 0,
+        shadows: 0,
+        midtones: 0,
+        whiteBalance2: 'Custom WB 1',
+        whiteBalanceTemperature: 5200,
+        whiteBalanceAmberOffset: 0,
+        whiteBalanceGreenOffset: 0,
+        ...overrides
+    };
+}
+
+function queueNewRecipeInsertSequence() {
+    executeResults = [
+        {
+            rows: [{ id: 777, uuid: 'recipe-uuid-1', slug: 'author_recipe-name' }]
+        }
+    ];
+    insertHandlers = [
+        () => ({
+            values: vi.fn((values) => {
+                capturedImageValues = values;
+                return {
+                    returning: vi.fn(() => Promise.resolve([{ id: 888, uuid: 'image-uuid-1' }]))
+                };
+            })
+        })
+    ];
+}
+
+function makeFormData(entries) {
+    return {
+        get(key) {
+            return entries[key] ?? null;
+        }
+    };
+}
 function collectSqlTokens(node, tokens = []) {
     if (!node || typeof node !== 'object') {
         return tokens;
@@ -52,10 +152,15 @@ function collectSqlTokens(node, tokens = []) {
     return tokens;
 }
 
+function getTableName(table) {
+    return table?.[Symbol.for('drizzle:Name')] ?? table?.[Symbol.for('drizzle:BaseName')] ?? table?._?.name ?? table?.name ?? null;
+}
 vi.mock('../db/index.ts', () => ({
     db: {
         select: (...args) => selectMock(...args),
-        insert: (...args) => insertMock(...args)
+        insert: (...args) => insertMock(...args),
+        execute: (...args) => executeMock(...args),
+        update: (...args) => updateMock(...args)
     }
 }));
 
@@ -66,10 +171,13 @@ vi.mock('../lib/oci/objectStorage.js', () => ({
 }));
 
 vi.mock('../lib/recipeFingerprint.js', () => ({
-    computeRecipeFingerprint: (...args) => computeFingerprintMock(...args),
-    computeColorFingerprint: () => 'color-fp-123',
-    computeColorToneFingerprint: () => 'color-tone-fp-123',
-    computeNoWbFingerprint: () => 'no-wb-fp-123'
+    computeRecipeFingerprint: (...args) => computeRecipeFingerprintMock(...args),
+    computeColorFingerprint: (...args) => computeColorFingerprintMock(...args),
+    computeColorToneFingerprint: (...args) => computeColorToneFingerprintMock(...args),
+    computeNoWbFingerprint: (...args) => computeNoWbFingerprintMock(...args),
+    computeMonoFingerprint: (...args) => computeMonoFingerprintMock(...args),
+    computeMonoToneFingerprint: (...args) => computeMonoToneFingerprintMock(...args),
+    computeMonoNoWbFingerprint: (...args) => computeMonoNoWbFingerprintMock(...args)
 }));
 
 vi.mock('../lib/auth.js', () => ({
@@ -77,8 +185,24 @@ vi.mock('../lib/auth.js', () => ({
     findOrCreateAuthorForUser: (...args) => findOrCreateAuthorForUserMock(...args)
 }));
 
+vi.mock('next/cache', () => ({
+    revalidatePath: (...args) => revalidatePathMock(...args)
+}));
+
+vi.mock('next/navigation', () => ({
+    redirect: (...args) => redirectMock(...args)
+}));
+
+vi.mock('../lib/oci/deleteOrphanedImages.js', () => ({
+    deleteOrphanedImagesByIds: (...args) => deleteOrphanedImagesByIdsMock(...args)
+}));
+
 async function loadActionsModule() {
     return import('../app/upload/actions.js');
+}
+
+async function loadRecipeActionsModule() {
+    return import('../app/recipes/[id]/actions.js');
 }
 
 beforeEach(() => {
@@ -90,7 +214,14 @@ beforeEach(() => {
     }
     selectResults = [];
     insertHandlers = [];
+    executeResults = [];
+    updateHandlers = [];
+    selectChains = [];
+    capturedRecipeValues = null;
+    capturedRecipeSettingsValues = null;
     capturedImageValues = null;
+    capturedChildSyncValues = null;
+    capturedParentSyncValues = null;
     capturedWhereClauses = [];
 
     selectMock = vi.fn(() => {
@@ -98,7 +229,9 @@ beforeEach(() => {
             throw new Error('Unexpected select call');
         }
         const next = selectResults.shift();
-        return makeSelectChain(next);
+        const chain = makeSelectChain(next);
+        selectChains.push(chain);
+        return chain;
     });
 
     insertMock = vi.fn(() => {
@@ -108,9 +241,38 @@ beforeEach(() => {
         const handler = insertHandlers.shift();
         return handler();
     });
+    executeMock = vi.fn((statement) => {
+        capturedRecipeValues = statement?.__recipeValues ?? null;
+        if (executeResults.length === 0) {
+            throw new Error('Unexpected execute call');
+        }
+        const next = executeResults.shift();
+        const result = typeof next === 'function' ? next(statement) : next;
+        const insertedRecipeId = result?.rows?.[0]?.id ?? result?.[0]?.id ?? null;
+        capturedRecipeSettingsValues = statement?.__settingsValues
+            ? {
+                  recipeId: insertedRecipeId,
+                  ...statement.__settingsValues
+              }
+            : null;
+        return Promise.resolve(result);
+    });
+    updateMock = vi.fn(() => {
+        if (updateHandlers.length === 0) {
+            throw new Error('Unexpected update call');
+        }
+        const handler = updateHandlers.shift();
+        return handler();
+    });
 
     createParMock = vi.fn(() => 'https://example.com/upload');
-    computeFingerprintMock = vi.fn(() => 'fp-123');
+    computeRecipeFingerprintMock = vi.fn(() => 'fp-123');
+    computeColorFingerprintMock = vi.fn(() => 'color-fp-123');
+    computeColorToneFingerprintMock = vi.fn(() => 'color-tone-fp-123');
+    computeNoWbFingerprintMock = vi.fn(() => 'no-wb-fp-123');
+    computeMonoFingerprintMock = vi.fn(() => 'mono-fp-123');
+    computeMonoToneFingerprintMock = vi.fn(() => 'mono-tone-fp-123');
+    computeMonoNoWbFingerprintMock = vi.fn(() => 'mono-no-wb-fp-123');
     requireUserMock = vi.fn(async () => ({
         user: {
             id: 10,
@@ -122,6 +284,9 @@ beforeEach(() => {
         uuid: 'author-uuid-1',
         name: 'Author'
     }));
+    revalidatePathMock = vi.fn();
+    redirectMock = vi.fn();
+    deleteOrphanedImagesByIdsMock = vi.fn();
 });
 
 describe('prepareRecipeUploadAction duplicate handling', () => {
@@ -193,23 +358,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
             []
         ];
 
-        insertHandlers = [
-            () => ({
-                values: vi.fn(() => ({
-                    returning: vi.fn(() =>
-                        Promise.resolve([{ id: 777, uuid: 'recipe-uuid-1', slug: 'author_recipe-name' }])
-                    )
-                }))
-            }),
-            () => ({
-                values: vi.fn((values) => {
-                    capturedImageValues = values;
-                    return {
-                        returning: vi.fn(() => Promise.resolve([{ id: 888, uuid: 'image-uuid-1' }]))
-                    };
-                })
-            })
-        ];
+        queueNewRecipeInsertSequence();
 
         const { prepareRecipeUploadAction } = await loadActionsModule();
 
@@ -226,15 +375,15 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
                 },
                 recipeSettings: {
                     isOmWorkspace: true,
-                    hasColorProfileSettings: true,
-                    hasToneLevel: true
+                    ...makeColorRecipeSettings()
                 }
             }
         });
 
         expect(result.ok).toBe(true);
         expect(createParMock).toHaveBeenCalledTimes(1);
-        expect(insertMock).toHaveBeenCalledTimes(2);
+        expect(executeMock).toHaveBeenCalledTimes(1);
+        expect(insertMock).toHaveBeenCalledTimes(1);
     });
 
     it('allows prepare without a client-provided image checksum', async () => {
@@ -286,7 +435,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(capturedImageValues.sha256Hash).toBeNull();
         expect(insertMock).toHaveBeenCalledTimes(1);
         expect(createParMock).toHaveBeenCalledTimes(1);
-        expect(computeFingerprintMock).toHaveBeenCalledTimes(1);
+        expect(computeRecipeFingerprintMock).toHaveBeenCalledTimes(1);
         expect(selectResults.length).toBe(0);
     });
 
@@ -296,52 +445,11 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
             []
         ];
 
-        insertHandlers = [
-            () => ({
-                values: vi.fn(() => ({
-                    returning: vi.fn(() =>
-                        Promise.resolve([{ id: 777, uuid: 'recipe-uuid-1', slug: 'author_recipe-name' }])
-                    )
-                }))
-            }),
-            () => ({
-                values: vi.fn((values) => {
-                    capturedImageValues = values;
-                    return {
-                        returning: vi.fn(() => Promise.resolve([{ id: 888, uuid: 'image-uuid-1' }]))
-                    };
-                })
-            })
-        ];
+        queueNewRecipeInsertSequence();
 
         const { prepareRecipeUploadAction } = await loadActionsModule();
 
         const digest = 'b'.repeat(64);
-        const baseRecipeSettings = {
-            hasColorProfileSettings: true,
-            hasToneLevel: true,
-            yellow: 0,
-            orange: 0,
-            orangeRed: 0,
-            red: 0,
-            magenta: 0,
-            violet: 0,
-            blue: 0,
-            blueCyan: 0,
-            cyan: 0,
-            greenCyan: 0,
-            green: 0,
-            yellowGreen: 0,
-            contrast: 0,
-            sharpness: 0,
-            highlights: 0,
-            shadows: 0,
-            midtones: 0,
-            whiteBalance2: 'Custom WB 1',
-            whiteBalanceTemperature: 5200,
-            whiteBalanceAmberOffset: 0,
-            whiteBalanceGreenOffset: 0
-        };
 
         const result = await prepareRecipeUploadAction({
             parameters: {
@@ -355,13 +463,14 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
                     size: 4096,
                     sha256: digest
                 },
-                recipeSettings: baseRecipeSettings
+                recipeSettings: makeColorRecipeSettings()
             }
         });
 
         expect(result.ok).toBe(true);
         expect(result.shouldCreateRecipe).toBe(true);
         expect(createParMock).toHaveBeenCalledTimes(1);
+        expect(executeMock).toHaveBeenCalledTimes(1);
         expect(capturedImageValues).toBeDefined();
         expect(capturedImageValues.uuid).toBe(result.imageUuid);
         expect(capturedImageValues.sha256Hash).toBe(digest);
@@ -411,31 +520,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
                     size: 4096,
                     sha256: 'e'.repeat(64)
                 },
-                recipeSettings: {
-                    hasColorProfileSettings: true,
-                    hasToneLevel: true,
-                    yellow: 0,
-                    orange: 0,
-                    orangeRed: 0,
-                    red: 0,
-                    magenta: 0,
-                    violet: 0,
-                    blue: 0,
-                    blueCyan: 0,
-                    cyan: 0,
-                    greenCyan: 0,
-                    green: 0,
-                    yellowGreen: 0,
-                    contrast: 0,
-                    sharpness: 0,
-                    highlights: 0,
-                    shadows: 0,
-                    midtones: 0,
-                    whiteBalance2: 'Custom WB 1',
-                    whiteBalanceTemperature: 5200,
-                    whiteBalanceAmberOffset: 0,
-                    whiteBalanceGreenOffset: 0
-                }
+                recipeSettings: makeColorRecipeSettings()
             }
         });
 
@@ -452,6 +537,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(capturedImageValues.preparedRecipeId).toBe(321);
         expect(capturedImageValues.preparedObjectKey).toBe(result.objectKey);
         expect(capturedImageValues.uuid).toBe(result.imageUuid);
+        expect(executeMock).not.toHaveBeenCalled();
         expect(insertMock).toHaveBeenCalledTimes(1);
         expect(insertHandlers.length).toBe(0);
         expect(selectResults.length).toBe(0);
@@ -925,30 +1011,13 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
     });
 
     it('stores a normalized source URL when creating a new recipe', async () => {
-        let capturedRecipeValues = null;
         selectResults = [
             [],
             [],
             []
         ];
 
-        insertHandlers = [
-            () => ({
-                values: vi.fn((values) => {
-                    capturedRecipeValues = values;
-                    return {
-                        returning: vi.fn(() =>
-                            Promise.resolve([{ id: 777, uuid: 'recipe-uuid-1', slug: 'author_recipe-name' }])
-                        )
-                    };
-                })
-            }),
-            () => ({
-                values: vi.fn(() => ({
-                    returning: vi.fn(() => Promise.resolve([{ id: 888, uuid: 'image-uuid-1' }]))
-                }))
-            })
-        ];
+        queueNewRecipeInsertSequence();
 
         const { prepareRecipeUploadAction } = await loadActionsModule();
 
@@ -964,38 +1033,280 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
                     size: 4096,
                     sha256: 'd'.repeat(64)
                 },
-                recipeSettings: {
-                    hasColorProfileSettings: true,
-                    hasToneLevel: true,
-                    source: 'OM-3/OM System Camera',
-                    yellow: 0,
-                    orange: 0,
-                    orangeRed: 0,
-                    red: 0,
-                    magenta: 0,
-                    violet: 0,
-                    blue: 0,
-                    blueCyan: 0,
-                    cyan: 0,
-                    greenCyan: 0,
-                    green: 0,
-                    yellowGreen: 0,
-                    contrast: 0,
-                    sharpness: 0,
-                    highlights: 0,
-                    shadows: 0,
-                    midtones: 0,
-                    whiteBalance2: 'Custom WB 1',
-                    whiteBalanceTemperature: 5200,
-                    whiteBalanceAmberOffset: 0,
-                    whiteBalanceGreenOffset: 0
-                }
+                recipeSettings: makeColorRecipeSettings({
+                    source: 'OM-3/OM System Camera'
+                })
             }
         });
 
         expect(result.ok).toBe(true);
+        expect(executeMock).toHaveBeenCalledTimes(1);
         expect(capturedRecipeValues.source).toBe('OM-3/OM System Camera');
         expect(capturedRecipeValues.sourceUrl).toBe('https://example.com/original-recipe');
+    });
+
+    it('accepts MONO uploads and writes the mono settings child row', async () => {
+        selectResults = [
+            [],
+            [],
+            []
+        ];
+        queueNewRecipeInsertSequence();
+
+        const { prepareRecipeUploadAction } = await loadActionsModule();
+
+        const result = await prepareRecipeUploadAction({
+            parameters: {
+                author: 'Author',
+                name: 'Mono Recipe',
+                notes: '',
+                imageMeta: {
+                    name: 'mono.jpg',
+                    type: 'image/jpeg',
+                    size: 4096,
+                    sha256: 'f'.repeat(64)
+                },
+                recipeSettings: makeMonoRecipeSettings()
+            }
+        });
+
+        expect(result.ok).toBe(true);
+        expect(result.shouldCreateRecipe).toBe(true);
+        expect(executeMock).toHaveBeenCalledTimes(1);
+        expect(insertMock).toHaveBeenCalledTimes(1);
+        expect(getTableName(executeMock.mock.calls[0][0].__settingsTable)).toBe(getTableName(recipeMonoSettings));
+        expect(capturedRecipeValues.type).toBe('MONO');
+        expect(capturedRecipeValues).toEqual(
+            expect.objectContaining({
+                type: 'MONO',
+                yellow: null,
+                orange: null,
+                orangeRed: null,
+                red: null,
+                magenta: null,
+                violet: null,
+                blue: null,
+                blueCyan: null,
+                cyan: null,
+                greenCyan: null,
+                green: null,
+                yellowGreen: null,
+                contrast: 0,
+                sharpness: 0,
+                highlights: 0,
+                shadows: 0,
+                midtones: 0,
+                whiteBalance2: 'Custom WB 1',
+                whiteBalanceTemperature: 5200,
+                whiteBalanceAmberOffset: 0,
+                whiteBalanceGreenOffset: 0,
+                recipeFingerprint: 'fp-123',
+                colorFingerprint: 'mono-fp-123',
+                colorToneFingerprint: 'mono-tone-fp-123',
+                noWbFingerprint: 'mono-no-wb-fp-123'
+            })
+        );
+        expect(capturedRecipeSettingsValues).toEqual(
+            expect.objectContaining({
+                recipeId: 777,
+                monochromeProfile: 'MONOTONE',
+                monochromeColor: 'Yellow',
+                monochromeColorStrength: 1,
+                filmGrain: 'Low',
+                filmHue: 'Warm',
+                monochromeVignetting: 'Low',
+                contrast: 0,
+                sharpness: 0,
+                highlights: 0,
+                shadows: 0,
+                midtones: 0,
+                whiteBalance2: 'Custom WB 1',
+                whiteBalanceTemperature: 5200,
+                whiteBalanceAmberOffset: 0,
+                whiteBalanceGreenOffset: 0,
+                recipeFingerprint: 'fp-123',
+                monoFingerprint: 'mono-fp-123',
+                monoToneFingerprint: 'mono-tone-fp-123',
+                monoNoWbFingerprint: 'mono-no-wb-fp-123'
+            })
+        );
+    });
+
+    it('does not match a MONO upload against color recipe fingerprint rows', async () => {
+        selectResults = [
+            [],
+            (chain) => {
+                const joinedTable = chain.innerJoin.mock.calls[0]?.[0];
+                return joinedTable === recipeMonoSettings
+                    ? []
+                    : [
+                          {
+                              id: 321,
+                              uuid: 'color-recipe-uuid',
+                              slug: 'existing-color-recipe',
+                              recipeName: 'Existing Color Recipe',
+                              authorName: 'Existing Author'
+                          }
+                      ];
+            },
+            []
+        ];
+        queueNewRecipeInsertSequence();
+
+        const { prepareRecipeUploadAction } = await loadActionsModule();
+
+        const result = await prepareRecipeUploadAction({
+            parameters: {
+                author: 'Author',
+                name: 'Mono Recipe',
+                notes: '',
+                imageMeta: {
+                    name: 'mono.jpg',
+                    type: 'image/jpeg',
+                    size: 4096,
+                    sha256: '1'.repeat(64)
+                },
+                recipeSettings: makeMonoRecipeSettings()
+            }
+        });
+
+        expect(result.ok).toBe(true);
+        expect(result.shouldCreateRecipe).toBe(true);
+        expect(selectChains.some((chain) => getTableName(chain.innerJoin.mock.calls[0]?.[0]) === getTableName(recipeMonoSettings))).toBe(true);
+        expect(executeMock).toHaveBeenCalledTimes(1);
+        expect(getTableName(executeMock.mock.calls[0][0].__settingsTable)).toBe(getTableName(recipeMonoSettings));
+        expect(result.matchedRecipe).toBeNull();
+    });
+
+    it('preserves the color upload path by writing only the color settings child row', async () => {
+        selectResults = [
+            [],
+            [],
+            []
+        ];
+        queueNewRecipeInsertSequence();
+
+        const { prepareRecipeUploadAction } = await loadActionsModule();
+
+        const result = await prepareRecipeUploadAction({
+            parameters: {
+                author: 'Author',
+                name: 'Color Recipe',
+                notes: '',
+                imageMeta: {
+                    name: 'color.jpg',
+                    type: 'image/jpeg',
+                    size: 4096,
+                    sha256: '2'.repeat(64)
+                },
+                recipeSettings: makeColorRecipeSettings()
+            }
+        });
+
+        expect(result.ok).toBe(true);
+        expect(result.shouldCreateRecipe).toBe(true);
+        expect(executeMock).toHaveBeenCalledTimes(1);
+        expect(insertMock).toHaveBeenCalledTimes(1);
+        expect(getTableName(executeMock.mock.calls[0][0].__recipesTable)).toBe(getTableName(recipes));
+        expect(getTableName(executeMock.mock.calls[0][0].__settingsTable)).toBe(getTableName(recipeColorSettings));
+        expect(capturedRecipeValues).toEqual(
+            expect.objectContaining({
+                type: 'COLOR',
+                yellow: 0,
+                orange: 0,
+                orangeRed: 0,
+                red: 0,
+                magenta: 0,
+                violet: 0,
+                blue: 0,
+                blueCyan: 0,
+                cyan: 0,
+                greenCyan: 0,
+                green: 0,
+                yellowGreen: 0,
+                contrast: 0,
+                sharpness: 0,
+                highlights: 0,
+                shadows: 0,
+                midtones: 0,
+                whiteBalance2: 'Custom WB 1',
+                whiteBalanceTemperature: 5200,
+                whiteBalanceAmberOffset: 0,
+                whiteBalanceGreenOffset: 0,
+                recipeFingerprint: 'fp-123',
+                colorFingerprint: 'color-fp-123',
+                colorToneFingerprint: 'color-tone-fp-123',
+                noWbFingerprint: 'no-wb-fp-123'
+            })
+        );
+        expect(capturedRecipeSettingsValues).toEqual(
+            expect.objectContaining({
+                recipeId: 777,
+                yellow: 0,
+                orange: 0,
+                orangeRed: 0,
+                red: 0,
+                magenta: 0,
+                violet: 0,
+                blue: 0,
+                blueCyan: 0,
+                cyan: 0,
+                greenCyan: 0,
+                green: 0,
+                yellowGreen: 0,
+                contrast: 0,
+                sharpness: 0,
+                highlights: 0,
+                shadows: 0,
+                midtones: 0,
+                whiteBalance2: 'Custom WB 1',
+                whiteBalanceTemperature: 5200,
+                whiteBalanceAmberOffset: 0,
+                whiteBalanceGreenOffset: 0,
+                recipeFingerprint: 'fp-123',
+                colorFingerprint: 'color-fp-123',
+                colorToneFingerprint: 'color-tone-fp-123',
+                noWbFingerprint: 'no-wb-fp-123'
+            })
+        );
+    });
+
+    it('builds recipe creation SQL with unqualified insert target columns', async () => {
+        selectResults = [
+            [],
+            [],
+            []
+        ];
+        queueNewRecipeInsertSequence();
+
+        const { prepareRecipeUploadAction } = await loadActionsModule();
+
+        const result = await prepareRecipeUploadAction({
+            parameters: {
+                author: 'Author',
+                name: 'Color Recipe',
+                notes: '',
+                imageMeta: {
+                    name: 'color.jpg',
+                    type: 'image/jpeg',
+                    size: 4096,
+                    sha256: '3'.repeat(64)
+                },
+                recipeSettings: makeColorRecipeSettings()
+            }
+        });
+
+        expect(result.ok).toBe(true);
+
+        const statement = executeMock.mock.calls[0][0];
+        const { PgDialect } = await import('drizzle-orm/pg-core');
+        const { sql } = new PgDialect().sqlToQuery(statement);
+        const compactSql = sql.replace(/\s+/g, ' ').trim();
+
+        expect(compactSql).toContain('insert into "recipes" ( "author_id", "slug", "type"');
+        expect(compactSql).not.toContain('insert into "recipes" ( "recipes"."author_id"');
+        expect(compactSql).toContain('insert into "recipe_color_settings" ( "recipe_id", "yellow", "orange"');
+        expect(compactSql).not.toContain('insert into "recipe_color_settings" ( "recipe_color_settings"."recipe_id"');
     });
 
     it('detects duplicates via checkImageDuplicateAction', async () => {
@@ -1026,5 +1337,145 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
             })
         );
         expect(selectResults.length).toBe(0);
+    });
+
+    it('scopes recipe matching to MONO fingerprint rows', async () => {
+        const onlyIfMonoJoin = (chain) => {
+            const joinedTable = chain.innerJoin.mock.calls[0]?.[0];
+            return getTableName(joinedTable) === getTableName(recipeMonoSettings)
+                ? []
+                : [
+                      {
+                          id: 123,
+                          uuid: 'color-recipe-uuid',
+                          slug: 'color-recipe',
+                          recipeName: 'Color Recipe',
+                          authorName: 'Color Author'
+                      }
+                  ];
+        };
+        selectResults = [onlyIfMonoJoin, onlyIfMonoJoin, onlyIfMonoJoin, onlyIfMonoJoin];
+
+        const { findRecipeMatchAction } = await loadActionsModule();
+
+        const result = await findRecipeMatchAction({
+            parameters: {
+                recipeSettings: makeMonoRecipeSettings()
+            }
+        });
+
+        expect(result).toEqual({
+            ok: true,
+            full: null,
+            noWb: null,
+            colorTone: null,
+            color: null
+        });
+        expect(selectChains).toHaveLength(4);
+        for (const chain of selectChains) {
+            expect(getTableName(chain.innerJoin.mock.calls[0]?.[0])).toBe(getTableName(recipeMonoSettings));
+        }
+    });
+});
+
+describe('updateRecipeAction fingerprint sync', () => {
+    it('mirrors MONO child settings back onto the legacy parent columns while refreshing fingerprints', async () => {
+        selectResults = [
+            [{ id: 10 }],
+            [{ id: 777, uuid: 'recipe-uuid-1', slug: 'mono-recipe', type: 'MONO' }],
+            [
+                {
+                    monochromeProfile: 'MONOTONE',
+                    monochromeColor: 'Yellow',
+                    monochromeColorStrength: 1,
+                    filmGrain: 'Low',
+                    filmHue: 'Warm',
+                    monochromeVignetting: 'Low',
+                    contrast: 0,
+                    sharpness: 0,
+                    highlights: 0,
+                    shadows: 0,
+                    midtones: 0,
+                    whiteBalance2: 'Custom WB 1',
+                    whiteBalanceTemperature: 5200,
+                    whiteBalanceAmberOffset: 0,
+                    whiteBalanceGreenOffset: 0
+                }
+            ]
+        ];
+        updateHandlers = [
+            () => ({
+                set: vi.fn((values) => {
+                    capturedChildSyncValues = values;
+                    return {
+                        where: vi.fn(() => Promise.resolve())
+                    };
+                })
+            }),
+            () => ({
+                set: vi.fn((values) => {
+                    capturedParentSyncValues = values;
+                    return {
+                        where: vi.fn(() => ({
+                            returning: vi.fn(() =>
+                                Promise.resolve([{ id: 777, uuid: 'recipe-uuid-1', slug: 'mono-recipe' }])
+                            )
+                        }))
+                    };
+                })
+            })
+        ];
+
+        const { updateRecipeAction } = await loadRecipeActionsModule();
+
+        await updateRecipeAction(
+            makeFormData({
+                recipeId: '777',
+                recipeName: 'Updated Mono Recipe',
+                description: 'Updated description',
+                sourceUrl: 'https://example.com/source'
+            })
+        );
+
+        expect(capturedChildSyncValues).toEqual({
+            recipeFingerprint: 'fp-123',
+            monoFingerprint: 'mono-fp-123',
+            monoToneFingerprint: 'mono-tone-fp-123',
+            monoNoWbFingerprint: 'mono-no-wb-fp-123'
+        });
+        expect(capturedParentSyncValues).toEqual(
+            expect.objectContaining({
+                recipeName: 'Updated Mono Recipe',
+                description: 'Updated description',
+                sourceUrl: 'https://example.com/source',
+                yellow: null,
+                orange: null,
+                orangeRed: null,
+                red: null,
+                magenta: null,
+                violet: null,
+                blue: null,
+                blueCyan: null,
+                cyan: null,
+                greenCyan: null,
+                green: null,
+                yellowGreen: null,
+                contrast: 0,
+                sharpness: 0,
+                highlights: 0,
+                shadows: 0,
+                midtones: 0,
+                whiteBalance2: 'Custom WB 1',
+                whiteBalanceTemperature: 5200,
+                whiteBalanceAmberOffset: 0,
+                whiteBalanceGreenOffset: 0,
+                recipeFingerprint: 'fp-123',
+                colorFingerprint: 'mono-fp-123',
+                colorToneFingerprint: 'mono-tone-fp-123',
+                noWbFingerprint: 'mono-no-wb-fp-123'
+            })
+        );
+        expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/mono-recipe');
+        expect(updateHandlers).toHaveLength(0);
     });
 });

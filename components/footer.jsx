@@ -14,7 +14,7 @@ export async function Footer() {
                 <div className="space-y-2">
                     <Badge variant="outline">OM Recipes</Badge>
                     <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                        A searchable OM System color recipe library with author samples, export files, and profile-backed uploads.
+                        A searchable OM System recipe library with author samples, export files, and profile-backed uploads.
                     </p>
                 </div>
                 <div className="flex flex-col items-start gap-2 text-sm text-muted-foreground sm:items-end">

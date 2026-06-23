@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { parseRecipeSettingsFromExif } from '../lib/exifparse.js';
 
@@ -18,7 +19,82 @@ function makeExif(overrides = '') {
     return overrides + '\n' + BASE_EXIF;
 }
 
+function loadExifFixture(name) {
+    return readFileSync(new URL(`../openspec/changes/monochrome-profiles/sample-exif/${name}`, import.meta.url), 'utf8');
+}
+
 describe('parseRecipeSettingsFromExif', () => {
+    describe('recipe type', () => {
+        it('classifies recipes without monochrome maker notes as COLOR', () => {
+            const exif = makeExif(`
+Picture Mode                    : Color Profile 2; 2
+Monochrome Color                : (none)
+`);
+            const result = parseRecipeSettingsFromExif(exif);
+            expect(result.recipeType).toBe('COLOR');
+            expect(result.hasMonochromeProfileSettings).toBe(false);
+            expect(result.monochromeProfile).toBeNull();
+            expect(result.monochromeColor).toBeNull();
+            expect(result.monochromeColorStrength).toBeNull();
+            expect(result.filmGrain).toBeNull();
+            expect(result.filmHue).toBeNull();
+            expect(result.monochromeVignetting).toBeNull();
+        });
+
+        it('treats sentinel monochrome profile settings values as absent', () => {
+            for (const sentinel of ['(none)', 'n/a']) {
+                const exif = makeExif(`
+Picture Mode                    : Color Profile 2; 2
+Monochrome Profile Settings     : ${sentinel}
+Monochrome Color                : (none)
+`);
+                const result = parseRecipeSettingsFromExif(exif);
+                expect(result.recipeType).toBe('COLOR');
+                expect(result.hasMonochromeProfileSettings).toBe(false);
+                expect(result.monochromeProfile).toBeNull();
+                expect(result.monochromeColor).toBeNull();
+                expect(result.monochromeColorStrength).toBeNull();
+                expect(result.filmGrain).toBeNull();
+                expect(result.filmHue).toBeNull();
+                expect(result.monochromeVignetting).toBeNull();
+            }
+        });
+
+        it('classifies monochrome maker notes as MONO and parses shared controls from fixture EXIF', () => {
+            const result = parseRecipeSettingsFromExif(loadExifFixture('P4070386.JPG.txt'));
+            expect(result.recipeType).toBe('MONO');
+            expect(result.hasMonochromeProfileSettings).toBe(true);
+            expect(result.hasColorProfileSettings).toBe(true);
+            expect(result.monochromeProfile).toBe('Monochrome Profile 2');
+            expect(result.monochromeColor).toBe('Red Filter');
+            expect(result.monochromeColorStrength).toBe(3);
+            expect(result.filmGrain).toBe('Off');
+            expect(result.filmHue).toBe('Normal');
+            expect(result.monochromeVignetting).toBe('0');
+            expect(result.Vignette).toBe('0');
+            expect(result.whiteBalance2).toBe('Auto');
+            expect(result.whiteBalanceTemperature).toBeNull();
+            expect(result.whiteBalanceAmberOffset).toBe(0);
+            expect(result.whiteBalanceGreenOffset).toBe(0);
+            expect(result.highlights).toBe(6);
+            expect(result.shadows).toBe(-6);
+            expect(result.midtones).toBe(0);
+            expect(result.contrast).toBe(0);
+            expect(result.sharpness).toBe(0);
+        });
+
+        it('parses alternate monochrome filter, grain, and hue values from fixture EXIF', () => {
+            const result = parseRecipeSettingsFromExif(loadExifFixture('P4070391.JPG.txt'));
+            expect(result.recipeType).toBe('MONO');
+            expect(result.monochromeProfile).toBe('Monochrome Profile 2');
+            expect(result.monochromeColor).toBe('Blue Filter');
+            expect(result.monochromeColorStrength).toBe(1);
+            expect(result.filmGrain).toBe('Medium');
+            expect(result.filmHue).toBe('Purple');
+            expect(result.monochromeVignetting).toBe('0');
+        });
+    });
+
     describe('white balance temperature', () => {
         it('reads temperature from the dedicated White Balance Temperature field', () => {
             const exif = makeExif(`

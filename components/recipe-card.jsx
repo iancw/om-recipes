@@ -81,6 +81,8 @@ export default function RecipeCard({
 
   const slug = recipe?.slug ?? '';
   const oesHref = slug ? `/oes/${slug}.oes` : '#';
+  const recipeType = String(recipe?.type ?? 'COLOR').toUpperCase();
+  const canDownloadOes = Boolean(slug && recipeType === 'COLOR');
 
   const authorLinks = useMemo(() => {
     const social = recipe?.authorSocial ?? {};
@@ -310,6 +312,7 @@ export default function RecipeCard({
             <div className="flex-1 space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary">Recipe</Badge>
+                <Badge variant="outline">{recipeType === 'MONO' ? 'Monochrome' : 'Color'}</Badge>
                 {recipe?.camera ? <Badge variant="outline">{recipe.camera}</Badge> : null}
                 {recipe?.filmSimulation ? <Badge variant="outline">{recipe.filmSimulation}</Badge> : null}
               </div>
@@ -389,9 +392,9 @@ export default function RecipeCard({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 xl:items-end">
-            <div className="flex flex-col gap-3 xl:items-end xl:text-right">
-              {slug ? (
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="flex flex-col gap-3 xl:items-end xl:text-right">
+              {canDownloadOes ? (
                 <a
                   href={oesHref}
                   download
@@ -399,6 +402,10 @@ export default function RecipeCard({
                 >
                   OM Workspace Batch Processing File
                 </a>
+              ) : recipeType === 'MONO' ? (
+                <p className="max-w-xs text-sm text-muted-foreground">
+                  OM Workspace `.oes` downloads are not available for monochrome recipes yet.
+                </p>
               ) : null}
               {downloadImageHref && (
                 <Button

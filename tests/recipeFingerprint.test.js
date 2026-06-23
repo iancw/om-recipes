@@ -3,9 +3,14 @@ import {
     computeRecipeFingerprint,
     computeColorFingerprint,
     computeColorToneFingerprint,
-    computeNoWbFingerprint
+    computeNoWbFingerprint,
+    computeMonoFingerprint,
+    computeMonoToneFingerprint,
+    computeMonoNoWbFingerprint
 } from '../lib/recipeFingerprint.js';
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { parseRecipeSettingsFromExif } from '../lib/exifparse.js';
 
 // Canonical settings used as a stable baseline throughout these tests.
 const BASE_SETTINGS = {
@@ -18,6 +23,29 @@ const BASE_SETTINGS = {
     whiteBalanceTemperature: 5800,
     whiteBalanceAmberOffset: 2,
     whiteBalanceGreenOffset: 1,
+};
+
+function loadExifFixture(name) {
+    return readFileSync(new URL(`../openspec/changes/monochrome-profiles/sample-exif/${name}`, import.meta.url), 'utf8');
+}
+
+const MONO_BASE_SETTINGS = parseRecipeSettingsFromExif(loadExifFixture('P4070386.JPG.txt'));
+const MONO_VARIANT_SETTINGS = parseRecipeSettingsFromExif(loadExifFixture('P4070391.JPG.txt'));
+
+const COLOR_LOOKALIKE_SETTINGS = {
+    recipeType: 'COLOR',
+    yellow: 0, orange: 0, orangeRed: 0, red: 0,
+    magenta: 0, violet: 0, blue: 0, blueCyan: 0,
+    cyan: 0, greenCyan: 0, green: 0, yellowGreen: 0,
+    contrast: MONO_BASE_SETTINGS.contrast,
+    sharpness: MONO_BASE_SETTINGS.sharpness,
+    highlights: MONO_BASE_SETTINGS.highlights,
+    shadows: MONO_BASE_SETTINGS.shadows,
+    midtones: MONO_BASE_SETTINGS.midtones,
+    whiteBalance2: MONO_BASE_SETTINGS.whiteBalance2,
+    whiteBalanceTemperature: MONO_BASE_SETTINGS.whiteBalanceTemperature,
+    whiteBalanceAmberOffset: MONO_BASE_SETTINGS.whiteBalanceAmberOffset,
+    whiteBalanceGreenOffset: MONO_BASE_SETTINGS.whiteBalanceGreenOffset
 };
 
 function expectedHash(payload) {
@@ -51,6 +79,32 @@ describe('computeRecipeFingerprint', () => {
         const fp1 = computeRecipeFingerprint(BASE_SETTINGS);
         const fp2 = computeRecipeFingerprint({ ...BASE_SETTINGS, whiteBalanceTemperature: 4000 });
         expect(fp1).not.toBe(fp2);
+    });
+
+    it('uses a mono-specific exact payload for monochrome recipes', () => {
+        expect(computeRecipeFingerprint(MONO_BASE_SETTINGS))
+            .not.toBe(computeRecipeFingerprint(COLOR_LOOKALIKE_SETTINGS));
+        expect(computeRecipeFingerprint(MONO_BASE_SETTINGS))
+            .not.toBe(computeRecipeFingerprint(MONO_VARIANT_SETTINGS));
+    });
+
+    it('infers MONO from mono-only fields when recipeType is omitted', () => {
+        const { recipeType, ...monoWithoutType } = MONO_BASE_SETTINGS;
+        expect(recipeType).toBe('MONO');
+        expect(computeRecipeFingerprint(monoWithoutType))
+            .toBe(computeRecipeFingerprint(MONO_BASE_SETTINGS));
+    });
+
+    it('falls back to the color payload when recipeType is MONO but only color controls are present', () => {
+        const mislabeledColor = { ...BASE_SETTINGS, recipeType: 'MONO' };
+        expect(computeRecipeFingerprint(mislabeledColor))
+            .toBe(computeRecipeFingerprint(BASE_SETTINGS));
+    });
+
+    it('falls back to the mono payload when recipeType is COLOR but only mono controls are present', () => {
+        const mislabeledMono = { ...MONO_BASE_SETTINGS, recipeType: 'COLOR' };
+        expect(computeRecipeFingerprint(mislabeledMono))
+            .toBe(computeRecipeFingerprint(MONO_BASE_SETTINGS));
     });
 
     it('treats null and 0 as equivalent for numeric fields (normInt coercion)', () => {
@@ -123,6 +177,23 @@ describe('computeColorFingerprint', () => {
         expect(computeColorFingerprint(BASE_SETTINGS))
             .toBe(computeColorFingerprint({ ...BASE_SETTINGS, whiteBalanceTemperature: 9999 }));
     });
+
+    it('remains usable for MONO recipes by returning the mono partial fingerprint', () => {
+        expect(computeColorFingerprint(MONO_BASE_SETTINGS))
+            .toBe(computeMonoFingerprint(MONO_BASE_SETTINGS));
+    });
+
+    it('falls back to the color partial payload when recipeType is MONO but the payload is color-shaped', () => {
+        const mislabeledColor = { ...BASE_SETTINGS, recipeType: 'MONO' };
+        expect(computeColorFingerprint(mislabeledColor))
+            .toBe(computeColorFingerprint(BASE_SETTINGS));
+    });
+
+    it('falls back to the mono partial payload when recipeType is COLOR but the payload is mono-shaped', () => {
+        const mislabeledMono = { ...MONO_BASE_SETTINGS, recipeType: 'COLOR' };
+        expect(computeColorFingerprint(mislabeledMono))
+            .toBe(computeMonoFingerprint(MONO_BASE_SETTINGS));
+    });
 });
 
 describe('computeColorToneFingerprint', () => {
@@ -148,6 +219,11 @@ describe('computeColorToneFingerprint', () => {
     it('is unaffected by white balance', () => {
         expect(computeColorToneFingerprint(BASE_SETTINGS))
             .toBe(computeColorToneFingerprint({ ...BASE_SETTINGS, whiteBalanceTemperature: 9999 }));
+    });
+
+    it('remains usable for MONO recipes by returning the mono tone fingerprint', () => {
+        expect(computeColorToneFingerprint(MONO_BASE_SETTINGS))
+            .toBe(computeMonoToneFingerprint(MONO_BASE_SETTINGS));
     });
 });
 
@@ -175,6 +251,41 @@ describe('computeNoWbFingerprint', () => {
         expect(computeNoWbFingerprint(BASE_SETTINGS))
             .toBe(computeNoWbFingerprint({ ...BASE_SETTINGS, whiteBalanceTemperature: 9999 }));
     });
+
+    it('remains usable for MONO recipes by returning the mono no-wb fingerprint', () => {
+        expect(computeNoWbFingerprint(MONO_BASE_SETTINGS))
+            .toBe(computeMonoNoWbFingerprint(MONO_BASE_SETTINGS));
+    });
+});
+
+describe('monochrome fingerprints', () => {
+    it('return 64-character hex strings', () => {
+        expect(computeMonoFingerprint(MONO_BASE_SETTINGS)).toMatch(/^[0-9a-f]{64}$/);
+        expect(computeMonoToneFingerprint(MONO_BASE_SETTINGS)).toMatch(/^[0-9a-f]{64}$/);
+        expect(computeMonoNoWbFingerprint(MONO_BASE_SETTINGS)).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('change when a mono-only control changes', () => {
+        expect(computeMonoFingerprint(MONO_BASE_SETTINGS))
+            .not.toBe(computeMonoFingerprint(MONO_VARIANT_SETTINGS));
+        expect(computeMonoToneFingerprint(MONO_BASE_SETTINGS))
+            .not.toBe(computeMonoToneFingerprint(MONO_VARIANT_SETTINGS));
+        expect(computeMonoNoWbFingerprint(MONO_BASE_SETTINGS))
+            .not.toBe(computeMonoNoWbFingerprint(MONO_VARIANT_SETTINGS));
+    });
+
+    it('scope shared controls the same way as the color partial fingerprints', () => {
+        expect(computeMonoFingerprint(MONO_BASE_SETTINGS))
+            .toBe(computeMonoFingerprint({ ...MONO_BASE_SETTINGS, shadows: 99, whiteBalanceTemperature: 4200 }));
+        expect(computeMonoToneFingerprint(MONO_BASE_SETTINGS))
+            .not.toBe(computeMonoToneFingerprint({ ...MONO_BASE_SETTINGS, shadows: 99 }));
+        expect(computeMonoToneFingerprint(MONO_BASE_SETTINGS))
+            .toBe(computeMonoToneFingerprint({ ...MONO_BASE_SETTINGS, contrast: 99, sharpness: 99 }));
+        expect(computeMonoNoWbFingerprint(MONO_BASE_SETTINGS))
+            .not.toBe(computeMonoNoWbFingerprint({ ...MONO_BASE_SETTINGS, contrast: 99 }));
+        expect(computeMonoNoWbFingerprint(MONO_BASE_SETTINGS))
+            .toBe(computeMonoNoWbFingerprint({ ...MONO_BASE_SETTINGS, whiteBalanceTemperature: 4200 }));
+    });
 });
 
 describe('computeRecipeFingerprint — golden hash', () => {
@@ -201,5 +312,25 @@ describe('computeRecipeFingerprint — golden hash', () => {
             whiteBalanceGreenOffset: 0,
         });
         expect(computeRecipeFingerprint(settings)).toBe(expected);
+    });
+
+    it('produces the expected hash for the sample monochrome recipe', () => {
+        const expected = expectedHash({
+            monochromeProfile: 'Monochrome Profile 2',
+            monochromeColor: 'Red Filter',
+            monochromeColorStrength: 3,
+            filmGrain: 'Off',
+            filmHue: 'Normal',
+            monochromeVignetting: '0',
+            contrast: 0,
+            sharpness: 0,
+            highlights: 6,
+            shadows: -6,
+            midtones: 0,
+            whiteBalanceTemperature: 0,
+            whiteBalanceAmberOffset: 0,
+            whiteBalanceGreenOffset: 0,
+        });
+        expect(computeRecipeFingerprint(MONO_BASE_SETTINGS)).toBe(expected);
     });
 });

@@ -13,7 +13,7 @@ export const metadata = {
         template: '%s | OM Recipes',
         default: 'OM Recipes'
     },
-    description: 'Discover and share color recipes for OM System and Olympus cameras.'
+    description: 'Discover and share color and monochrome recipes for OM System and Olympus cameras.'
 };
 
 export default async function RootLayout({ children }) {

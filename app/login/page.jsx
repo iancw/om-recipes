@@ -7,7 +7,7 @@ import { getSession, normalizeRedirectPath } from '../../lib/auth.js';
 
 export const metadata = {
     title: 'Log In',
-    description: 'Sign in to OM Recipes to upload and manage your color recipes for OM System and Olympus cameras.'
+    description: 'Sign in to OM Recipes to upload and manage your color and monochrome recipes for OM System and Olympus cameras.'
 };
 
 function getErrorMessage(code) {

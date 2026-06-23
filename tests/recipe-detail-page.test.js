@@ -5,7 +5,7 @@ let getSessionMock;
 let getSavedRecipeIdsForUserMock;
 let permanentRedirectMock;
 let notFoundMock;
-let recipeCardProps;
+let capturedRecipeCardProps;
 
 const makeSelectChain = (result) => ({
     from: vi.fn().mockReturnThis(),
@@ -41,7 +41,7 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('../components/recipe-card.jsx', () => ({
     default: (props) => {
-        recipeCardProps = props;
+        capturedRecipeCardProps = props;
         return null;
     }
 }));
@@ -86,13 +86,13 @@ describe('recipe detail page redirects', () => {
 
         getSessionMock = vi.fn(async () => ({ user: { id: 42 } }));
         getSavedRecipeIdsForUserMock = vi.fn(async () => new Set());
-        recipeCardProps = null;
         notFoundMock = vi.fn(() => {
             throw new Error('NOT_FOUND');
         });
         permanentRedirectMock = vi.fn((location) => {
             throw new Error(`REDIRECT:${location}`);
         });
+        capturedRecipeCardProps = null;
 
         const selectResults = [
             [
@@ -100,6 +100,7 @@ describe('recipe detail page redirects', () => {
                     id: 123,
                     uuid: '123e4567-e89b-12d3-a456-426614174000',
                     slug: 'portra-400',
+                    type: 'COLOR',
                     recipeName: 'Portra 400',
                     authorName: 'Author',
                     description: 'Description',
@@ -133,7 +134,33 @@ describe('recipe detail page redirects', () => {
                         flickr: null,
                         website: null,
                         kofi: null
-                    }
+                    },
+                    colorSettings: {
+                        yellow: 0,
+                        orange: 0,
+                        orangeRed: 0,
+                        red: 0,
+                        magenta: 0,
+                        violet: 0,
+                        blue: 0,
+                        blueCyan: 0,
+                        cyan: 0,
+                        greenCyan: 0,
+                        green: 0,
+                        yellowGreen: 0,
+                        contrast: 0,
+                        sharpness: 0,
+                        highlights: 0,
+                        shadows: 0,
+                        midtones: 0,
+                        shadingEffect: 0,
+                        exposureCompensation: 0,
+                        whiteBalance2: null,
+                        whiteBalanceTemperature: null,
+                        whiteBalanceAmberOffset: 0,
+                        whiteBalanceGreenOffset: 0
+                    },
+                    monoSettings: null
                 }
             ],
             [
@@ -237,6 +264,84 @@ describe('recipe detail page redirects', () => {
         ).rejects.toThrow('REDIRECT:/recipes/portra-400');
     });
 
+    it('passes normalized monochrome settings to the recipe card', async () => {
+        selectMock = vi.fn(() =>
+            makeSelectChain([
+                {
+                    id: 321,
+                    uuid: '223e4567-e89b-12d3-a456-426614174000',
+                    slug: 'mono-red',
+                    type: 'MONO',
+                    recipeName: 'Mono Red',
+                    authorName: 'Author',
+                    description: 'Description',
+                    sourceUrl: null,
+                    yellow: 5,
+                    contrast: -1,
+                    sharpness: 0,
+                    highlights: 0,
+                    shadows: 0,
+                    midtones: 0,
+                    shadingEffect: 0,
+                    exposureCompensation: 0,
+                    whiteBalance2: 'Auto',
+                    whiteBalanceTemperature: null,
+                    whiteBalanceAmberOffset: 0,
+                    whiteBalanceGreenOffset: 0,
+                    authorId: 9,
+                    authorSocial: {
+                        instagram: null,
+                        flickr: null,
+                        website: null,
+                        kofi: null
+                    },
+                    colorSettings: null,
+                    monoSettings: {
+                        monochromeProfile: 'Monochrome Profile 2',
+                        monochromeColor: 'Red Filter',
+                        monochromeColorStrength: 3,
+                        filmGrain: 'Strong',
+                        filmHue: 'Warm',
+                        monochromeVignetting: 'High',
+                        contrast: 2,
+                        sharpness: 1,
+                        highlights: 1,
+                        shadows: -1,
+                        midtones: 0,
+                        shadingEffect: 1,
+                        exposureCompensation: 0,
+                        whiteBalance2: 'Custom WB 1',
+                        whiteBalanceTemperature: 5200,
+                        whiteBalanceAmberOffset: 1,
+                        whiteBalanceGreenOffset: -1
+                    }
+                }
+            ])
+        );
+
+        const mod = await import('../app/recipes/[id]/page.jsx');
+
+        await mod.default({
+            params: Promise.resolve({
+                id: 'mono-red'
+            })
+        });
+
+        expect(capturedRecipeCardProps.recipe).toEqual(
+            expect.objectContaining({
+                type: 'MONO',
+                yellow: null,
+                monochromeColor: 'Red Filter',
+                monochromeColorStrength: 3,
+                filmGrain: 'Strong',
+                filmHue: 'Warm',
+                monochromeVignetting: 'High',
+                contrast: 2,
+                whiteBalance2: 'Custom WB 1'
+            })
+        );
+    });
+
     it('hydrates recipe media with asset-host URLs for the page loader', async () => {
         const mod = await import('../app/recipes/[id]/page.jsx');
 
@@ -246,7 +351,7 @@ describe('recipe detail page redirects', () => {
             })
         });
 
-        expect(recipeCardProps.recipe.comparisonImages[0]).toMatchObject({
+        expect(capturedRecipeCardProps.recipe.comparisonImages[0]).toMatchObject({
             id: 201,
             preparedObjectKey: 'authors/a/recipes/r/comparison.jpg',
             assetUrls: {
@@ -254,7 +359,7 @@ describe('recipe detail page redirects', () => {
             },
             label: 'Before'
         });
-        expect(recipeCardProps.recipe.sampleImages[0]).toMatchObject({
+        expect(capturedRecipeCardProps.recipe.sampleImages[0]).toMatchObject({
             id: 301,
             preparedObjectKey: 'authors/a/recipes/r/sample.jpg',
             assetUrls: {
@@ -262,8 +367,8 @@ describe('recipe detail page redirects', () => {
             },
             isPrimary: true
         });
-        expect(recipeCardProps.recipe.comparisonImages).toHaveLength(1);
-        expect(recipeCardProps.recipe.sampleImages).toHaveLength(1);
+        expect(capturedRecipeCardProps.recipe.comparisonImages).toHaveLength(1);
+        expect(capturedRecipeCardProps.recipe.sampleImages).toHaveLength(1);
     });
 
     it('uses the asset host for recipe Open Graph images', async () => {

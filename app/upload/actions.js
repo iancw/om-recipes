@@ -34,6 +34,7 @@ import {
 import { buildRecipeImageAssetUrl } from '../../lib/recipe-image-assets.js';
 import { findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
 import { getRecipePath } from '../../lib/recipe-url.js';
+import { revalidatePublicRecipeCatalog } from '../../lib/public-recipe-catalog-cache.js';
 
 const ORIGINAL_BUCKET = process.env.OCI_IMAGES_ORIGINAL_BUCKET;
 const RESIZED_BUCKET = process.env.OCI_IMAGES_PROCESSED_BUCKET;
@@ -800,6 +801,7 @@ export async function prepareRecipeUploadAction({ parameters }) {
             name: `upload-${imageUuid}`
         });
 
+        if (shouldCreateRecipe) await revalidatePublicRecipeCatalog();
         return {
             ok: true,
             parUrl,
@@ -934,6 +936,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
                     objectKey: preparedObjectKey
                 });
             }
+            await revalidatePublicRecipeCatalog();
             return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
         }
 
@@ -1016,6 +1019,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
         if (img[0].smallUrl) {
             resizeStatus.resizeSkipped = true;
             resizeStatus.resizeSucceeded = true;
+            await revalidatePublicRecipeCatalog();
             return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
         }
 
@@ -1027,6 +1031,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
             objectKey: preparedObjectKey
         });
 
+        await revalidatePublicRecipeCatalog();
         return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
     } catch (e) {
         console.error(e);

@@ -14,6 +14,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireUser } from '../../../lib/auth.js';
 import { getRecipePath } from '../../../lib/recipe-url.js';
+import { revalidatePublicRecipeCatalog } from '../../../lib/public-recipe-catalog-cache.js';
 
 import {
     computeRecipeFingerprint,
@@ -240,6 +241,7 @@ export async function updateRecipeAction(formData) {
         .returning({ id: recipes.id, uuid: recipes.uuid, slug: recipes.slug });
 
     const r = updated[0];
+    if (r) await revalidatePublicRecipeCatalog();
     revalidatePath(getRecipePath(r));
 }
 
@@ -297,6 +299,7 @@ export async function deleteMyRecipeAction(formData) {
         await deleteOrphanedImagesByIds(associatedImageIds);
     }
 
+    if (deleted.length > 0) await revalidatePublicRecipeCatalog();
     revalidatePath('/');
     redirect('/');
 }
@@ -335,6 +338,7 @@ export async function deleteRecipeSampleImageAction({ recipeId, imageId }) {
 
     await deleteOrphanedImagesByIds([parsedImageId]);
 
+    await revalidatePublicRecipeCatalog();
     const recipe = recipeRows[0];
     revalidatePath(getRecipePath(recipe));
     revalidatePath('/');
@@ -383,6 +387,7 @@ export async function setPrimaryRecipeSampleImageAction({ recipeId, imageId }) {
         .set({ isPrimary: true })
         .where(and(eq(recipeSampleImages.recipeId, parsedRecipeId), eq(recipeSampleImages.imageId, parsedImageId)));
 
+    await revalidatePublicRecipeCatalog();
     const recipe = recipeRows[0];
     revalidatePath(getRecipePath(recipe));
     revalidatePath('/');

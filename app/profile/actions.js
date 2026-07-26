@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { clearSessionCookie, findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
 import { startAccountDeletion, startPrivacyExport } from '../../lib/privacy.js';
+import { revalidatePublicRecipeCatalog } from '../../lib/public-recipe-catalog-cache.js';
 
 function normalizeOptionalUrl(v) {
     const s = String(v ?? '').trim();
@@ -44,6 +45,7 @@ export async function updateMyProfileAction(formData) {
         })
         .where(eq(authors.id, author.id));
 
+    await revalidatePublicRecipeCatalog();
     revalidatePath('/profile');
 }
 

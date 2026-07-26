@@ -3,6 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 let selectMock;
 let getSessionMock;
 let getSavedRecipeIdsForUserMock;
+const cacheState = vi.hoisted(() => ({ entries: new Map() }));
+
+vi.mock('next/cache', () => {
+    return {
+        unstable_cache: (fn, keyParts = []) => async (...args) => {
+            const key = JSON.stringify([keyParts, args]);
+            if (!cacheState.entries.has(key)) cacheState.entries.set(key, fn(...args));
+            return cacheState.entries.get(key);
+        },
+        revalidateTag: vi.fn()
+    };
+});
 
 vi.mock('../db/index.ts', () => ({
     db: {
@@ -34,6 +46,7 @@ function makeSelectChain(result) {
 describe('recipe search route', () => {
     beforeEach(() => {
         vi.resetModules();
+        cacheState.entries.clear();
 
         getSessionMock = vi.fn(async () => ({ user: { id: 42 } }));
         getSavedRecipeIdsForUserMock = vi.fn(async () => new Set([101]));
@@ -196,5 +209,16 @@ describe('recipe search route', () => {
         });
         expect(body.results[0].comparisonImages).toHaveLength(1);
         expect(body.results[0].sampleImages).toHaveLength(1);
+    });
+
+    it('reuses the public catalog query for a logged-in all-recipes request', async () => {
+        const { GET } = await import('../app/recipes/search/route.js');
+        const request = new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0');
+
+        await GET(request);
+        await GET(request);
+
+        expect(selectMock).toHaveBeenCalledTimes(3);
+        expect(getSavedRecipeIdsForUserMock).toHaveBeenCalledTimes(2);
     });
 });

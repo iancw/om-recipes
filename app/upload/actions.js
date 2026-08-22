@@ -35,7 +35,7 @@ import { buildRecipeImageAssetUrl } from '../../lib/recipe-image-assets.js';
 import { findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
 import { getRecipePath } from '../../lib/recipe-url.js';
 import { revalidatePublicRecipeCatalog } from '../../lib/public-recipe-catalog-cache.js';
-import { notifySampleImageAdded } from '../../lib/notifications.js';
+import { notifyNewRecipe, notifySampleImageAdded } from '../../lib/notifications.js';
 
 const ORIGINAL_BUCKET = process.env.OCI_IMAGES_ORIGINAL_BUCKET;
 const RESIZED_BUCKET = process.env.OCI_IMAGES_PROCESSED_BUCKET;
@@ -759,6 +759,8 @@ export async function prepareRecipeUploadAction({ parameters }) {
 
             createdRecipeId = recipeRow.id;
             createdRecipeUuid = recipeRow.uuid;
+
+            await notifyNewRecipe(createdRecipeId);
         }
 
         if (!createdRecipeId || !createdSlug) {

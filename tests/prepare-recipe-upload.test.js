@@ -18,6 +18,8 @@ let findOrCreateAuthorForUserMock;
 let revalidatePathMock;
 let redirectMock;
 let deleteOrphanedImagesByIdsMock;
+let notifyNewRecipeMock;
+let notifySampleImageAddedMock;
 
 let selectResults = [];
 let insertHandlers = [];
@@ -197,6 +199,11 @@ vi.mock('../lib/oci/deleteOrphanedImages.js', () => ({
     deleteOrphanedImagesByIds: (...args) => deleteOrphanedImagesByIdsMock(...args)
 }));
 
+vi.mock('../lib/notifications.js', () => ({
+    notifyNewRecipe: (...args) => notifyNewRecipeMock(...args),
+    notifySampleImageAdded: (...args) => notifySampleImageAddedMock(...args)
+}));
+
 async function loadActionsModule() {
     return import('../app/upload/actions.js');
 }
@@ -287,6 +294,8 @@ beforeEach(() => {
     revalidatePathMock = vi.fn();
     redirectMock = vi.fn();
     deleteOrphanedImagesByIdsMock = vi.fn();
+    notifyNewRecipeMock = vi.fn(() => Promise.resolve());
+    notifySampleImageAddedMock = vi.fn(() => Promise.resolve());
 });
 
 describe('prepareRecipeUploadAction duplicate handling', () => {
@@ -384,6 +393,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(createParMock).toHaveBeenCalledTimes(1);
         expect(executeMock).toHaveBeenCalledTimes(1);
         expect(insertMock).toHaveBeenCalledTimes(1);
+        expect(notifyNewRecipeMock).toHaveBeenCalledWith(result.recipeId);
     });
 
     it('allows prepare without a client-provided image checksum', async () => {
@@ -437,6 +447,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(createParMock).toHaveBeenCalledTimes(1);
         expect(computeRecipeFingerprintMock).toHaveBeenCalledTimes(1);
         expect(selectResults.length).toBe(0);
+        expect(notifyNewRecipeMock).not.toHaveBeenCalled();
     });
 
     it('stores the image SHA-256 digest when creating upload metadata', async () => {
@@ -481,6 +492,8 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(capturedImageValues.fullSizeUrl).toBeNull();
         expect(selectResults.length).toBe(0);
         expect(insertHandlers.length).toBe(0);
+        expect(notifyNewRecipeMock).toHaveBeenCalledWith(result.recipeId);
+        expect(notifyNewRecipeMock).toHaveBeenCalledTimes(1);
     });
 
     it('binds matched-recipe uploads to the existing recipe on the image row', async () => {
@@ -541,6 +554,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(insertMock).toHaveBeenCalledTimes(1);
         expect(insertHandlers.length).toBe(0);
         expect(selectResults.length).toBe(0);
+        expect(notifyNewRecipeMock).not.toHaveBeenCalled();
     });
 
     it('honors explicit attach recipe identity instead of an unordered fingerprint match', async () => {
@@ -626,6 +640,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         });
         expect(capturedImageValues.preparedRecipeId).toBe(321);
         expect(selectResults.length).toBe(0);
+        expect(notifyNewRecipeMock).not.toHaveBeenCalled();
     });
 
     it('resolves attach mode by UUID when the client sends a stale slug with a valid UUID', async () => {
@@ -717,6 +732,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(whereTokens).not.toContain('slug');
         expect(whereTokens).not.toContain('stale-slug');
         expect(selectResults.length).toBe(0);
+        expect(notifyNewRecipeMock).not.toHaveBeenCalled();
     });
 
     it('ignores create-only title and source URL validation when attach mode has a matched recipe identity', async () => {
@@ -803,6 +819,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         });
         expect(capturedImageValues.preparedRecipeId).toBe(777);
         expect(selectResults.length).toBe(0);
+        expect(notifyNewRecipeMock).not.toHaveBeenCalled();
     });
 
     it('rejects attach mode when the resolved recipe identity does not match the submitted fingerprint', async () => {
@@ -1008,6 +1025,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(createParMock).toHaveBeenCalledTimes(1);
         expect(selectMock).toHaveBeenCalledTimes(1);
         expect(selectResults.length).toBe(0);
+        expect(notifyNewRecipeMock).not.toHaveBeenCalled();
     });
 
     it('stores a normalized source URL when creating a new recipe', async () => {
@@ -1043,6 +1061,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(executeMock).toHaveBeenCalledTimes(1);
         expect(capturedRecipeValues.source).toBe('OM-3/OM System Camera');
         expect(capturedRecipeValues.sourceUrl).toBe('https://example.com/original-recipe');
+        expect(notifyNewRecipeMock).toHaveBeenCalledWith(result.recipeId);
     });
 
     it('accepts MONO uploads and writes the mono settings child row', async () => {
@@ -1074,6 +1093,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(result.shouldCreateRecipe).toBe(true);
         expect(executeMock).toHaveBeenCalledTimes(1);
         expect(insertMock).toHaveBeenCalledTimes(1);
+        expect(notifyNewRecipeMock).toHaveBeenCalledWith(result.recipeId);
         expect(getTableName(executeMock.mock.calls[0][0].__settingsTable)).toBe(getTableName(recipeMonoSettings));
         expect(capturedRecipeValues.type).toBe('MONO');
         expect(capturedRecipeValues).toEqual(
@@ -1176,6 +1196,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(executeMock).toHaveBeenCalledTimes(1);
         expect(getTableName(executeMock.mock.calls[0][0].__settingsTable)).toBe(getTableName(recipeMonoSettings));
         expect(result.matchedRecipe).toBeNull();
+        expect(notifyNewRecipeMock).toHaveBeenCalledWith(result.recipeId);
     });
 
     it('preserves the color upload path by writing only the color settings child row', async () => {
@@ -1207,6 +1228,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(result.shouldCreateRecipe).toBe(true);
         expect(executeMock).toHaveBeenCalledTimes(1);
         expect(insertMock).toHaveBeenCalledTimes(1);
+        expect(notifyNewRecipeMock).toHaveBeenCalledWith(result.recipeId);
         expect(getTableName(executeMock.mock.calls[0][0].__recipesTable)).toBe(getTableName(recipes));
         expect(getTableName(executeMock.mock.calls[0][0].__settingsTable)).toBe(getTableName(recipeColorSettings));
         expect(capturedRecipeValues).toEqual(
@@ -1297,6 +1319,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         });
 
         expect(result.ok).toBe(true);
+        expect(notifyNewRecipeMock).toHaveBeenCalledWith(result.recipeId);
 
         const statement = executeMock.mock.calls[0][0];
         const { PgDialect } = await import('drizzle-orm/pg-core');

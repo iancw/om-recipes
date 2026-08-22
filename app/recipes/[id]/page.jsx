@@ -23,7 +23,7 @@ import {
     setPrimaryRecipeSampleImageAction,
     updateRecipeAction
 } from './actions';
-import { getSavedRecipeIdsForUser } from '../../../lib/recipe-saves.js';
+import { getSavedRecipeIdsForUser, getSaveCountForRecipe } from '../../../lib/recipe-saves.js';
 import { getRecipeSelectFields, normalizeRecipeRow } from '../../../lib/recipe-data.js';
 import { hydrateRecipeImageRecord } from '../../../lib/recipe-image-assets.js';
 import { getRecipePath, isUuidLike } from '../../../lib/recipe-url.js';
@@ -234,6 +234,7 @@ export default async function Page({ params }) {
 
     const authedAuthorIds = await getAuthedAuthorIds(userId);
     const isOwner = authedAuthorIds.includes(recipe.authorId);
+    const saveCount = isOwner ? await getSaveCountForRecipe(recipe.id) : null;
 
     return (
         <div className="flex w-full flex-col gap-8 pb-10 pt-2">
@@ -241,6 +242,7 @@ export default async function Page({ params }) {
                 <RecipeCard
                     recipe={recipe}
                     isOwner={isOwner}
+                    saveCount={saveCount}
                     updateRecipeAction={updateRecipeAction}
                     deleteRecipeAction={deleteMyRecipeAction}
                 />

@@ -26,6 +26,7 @@ function isRedirectError(error) {
 export default function RecipeCard({
   recipe,
   isOwner = false,
+  saveCount = null,
   updateRecipeAction,
   deleteRecipeAction,
   onSavedChange,
@@ -315,6 +316,9 @@ export default function RecipeCard({
                 <Badge variant="outline">{recipeType === 'MONO' ? 'Monochrome' : 'Color'}</Badge>
                 {recipe?.camera ? <Badge variant="outline">{recipe.camera}</Badge> : null}
                 {recipe?.filmSimulation ? <Badge variant="outline">{recipe.filmSimulation}</Badge> : null}
+                {isOwner && typeof saveCount === 'number' ? (
+                  <Badge variant="outline">Saved {saveCount} {saveCount === 1 ? 'time' : 'times'}</Badge>
+                ) : null}
               </div>
             {editing ? (
               <div className="flex items-start gap-3 flex-wrap rounded-2xl border border-border/70 bg-muted/35 p-4">

@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { Button, buttonVariants } from 'components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from 'components/ui/card';
 import { getSession } from '../../lib/auth.js';
+import { getEffectivePreferences } from '../../lib/notifications.js';
 import { listPrivacyRequestsForUser, PRIVACY_REQUEST_STATUS_COMPLETED, PRIVACY_REQUEST_TYPE_EXPORT } from '../../lib/privacy.js';
-import { deleteMyAccountAction, requestMyDataExportAction, updateMyProfileAction } from './actions';
+import { deleteMyAccountAction, requestMyDataExportAction, updateMyNotificationPreferencesAction, updateMyProfileAction } from './actions';
+import { NotificationPreferencesForm } from './notifications-form';
 import { ProfileForm } from './profile-form';
 
 export const metadata = {
@@ -32,6 +34,7 @@ export default async function Page() {
     }
 
     const privacyRequests = await listPrivacyRequestsForUser(user.id);
+    const notificationPreferences = await getEffectivePreferences(user.id);
 
     return (
         <div className="w-full space-y-6">
@@ -53,6 +56,21 @@ export default async function Page() {
                         kofiLink: author?.kofiLink ?? ''
                     }}
                 />
+                </CardContent>
+            </Card>
+
+            <Card className="max-w-xl">
+                <CardHeader>
+                    <CardTitle>Notifications</CardTitle>
+                    <CardDescription>
+                        Choose what you hear about in the bell icon and in your daily email digest.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <NotificationPreferencesForm
+                        action={updateMyNotificationPreferencesAction}
+                        initialValues={notificationPreferences}
+                    />
                 </CardContent>
             </Card>
 

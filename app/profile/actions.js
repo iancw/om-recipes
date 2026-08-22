@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { clearSessionCookie, findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
+import { upsertNotificationPreferences } from '../../lib/notifications.js';
 import { startAccountDeletion, startPrivacyExport } from '../../lib/privacy.js';
 import { revalidatePublicRecipeCatalog } from '../../lib/public-recipe-catalog-cache.js';
 
@@ -55,6 +56,19 @@ export async function requestMyDataExportAction() {
     await startPrivacyExport({
         userId: session.user.id,
         userUuid: session.user.uuid
+    });
+
+    revalidatePath('/profile');
+}
+
+export async function updateMyNotificationPreferencesAction(formData) {
+    const session = await requireUser();
+
+    await upsertNotificationPreferences(session.user.id, {
+        notifyNewRecipe: formData?.has('notifyNewRecipe'),
+        notifySampleImage: formData?.has('notifySampleImage'),
+        notifySave: formData?.has('notifySave'),
+        emailDigestEnabled: formData?.has('emailDigestEnabled')
     });
 
     revalidatePath('/profile');

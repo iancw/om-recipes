@@ -35,6 +35,7 @@ import { buildRecipeImageAssetUrl } from '../../lib/recipe-image-assets.js';
 import { findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
 import { getRecipePath } from '../../lib/recipe-url.js';
 import { revalidatePublicRecipeCatalog } from '../../lib/public-recipe-catalog-cache.js';
+import { notifySampleImageAdded } from '../../lib/notifications.js';
 
 const ORIGINAL_BUCKET = process.env.OCI_IMAGES_ORIGINAL_BUCKET;
 const RESIZED_BUCKET = process.env.OCI_IMAGES_PROCESSED_BUCKET;
@@ -924,6 +925,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
 
         if (img[0].finalizedAt) {
             await ensureRecipeSampleImageLink();
+            await notifySampleImageAdded(preparedRecipeId, requestedImageId, img[0].authorId);
             if (img[0].smallUrl) {
                 resizeStatus.resizeSucceeded = true;
                 resizeStatus.resizeSkipped = true;
@@ -1015,6 +1017,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
             .where(and(eq(images.id, requestedImageId), isNull(images.finalizedAt)));
 
         await ensureRecipeSampleImageLink();
+        await notifySampleImageAdded(preparedRecipeId, requestedImageId, img[0].authorId);
 
         if (img[0].smallUrl) {
             resizeStatus.resizeSkipped = true;

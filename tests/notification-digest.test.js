@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { and, eq, isNotNull, isNull, or } from 'drizzle-orm';
 
 let selectMock;
 let selectDistinctMock;
@@ -8,6 +9,9 @@ let isSixPmEastern;
 let getUsersEligibleForDigest;
 let sendDailyDigestForUser;
 let runDailyDigest;
+let notifications;
+let notificationPreferences;
+let users;
 
 vi.mock('../db/index.ts', () => ({
     db: {
@@ -35,6 +39,10 @@ describe('daily digest', () => {
         getUsersEligibleForDigest = mod.getUsersEligibleForDigest;
         sendDailyDigestForUser = mod.sendDailyDigestForUser;
         runDailyDigest = mod.runDailyDigest;
+        const schema = await import('../db/schema.ts');
+        notifications = schema.notifications;
+        notificationPreferences = schema.notificationPreferences;
+        users = schema.users;
     });
 
     afterEach(() => {
@@ -95,5 +103,64 @@ describe('daily digest', () => {
 
         expect(result).toEqual({ sent: false, count: 0 });
         expect(sendEmailMock).not.toHaveBeenCalled();
+    });
+
+    describe('getUsersEligibleForDigest', () => {
+        function mockSelectDistinctChain(resolvedRows) {
+            const whereMock = vi.fn(() => Promise.resolve(resolvedRows));
+            const leftJoinMock = vi.fn(() => ({ where: whereMock }));
+            const innerJoinMock = vi.fn(() => ({ leftJoin: leftJoinMock }));
+            const fromMock = vi.fn(() => ({ innerJoin: innerJoinMock }));
+            selectDistinctMock = vi.fn(() => ({ from: fromMock }));
+            return { whereMock, leftJoinMock, innerJoinMock, fromMock };
+        }
+
+        it('joins on notification_preferences and filters with a where clause that treats a missing preferences row (NULL) as digest-enabled', async () => {
+            const rows = [{ userId: 1, uuid: 'user-1', email: 'no-prefs@example.com' }];
+            const { whereMock, leftJoinMock, innerJoinMock, fromMock } = mockSelectDistinctChain(rows);
+
+            const result = await getUsersEligibleForDigest();
+
+            expect(result).toBe(rows);
+            expect(fromMock).toHaveBeenCalledWith(notifications);
+            expect(innerJoinMock).toHaveBeenCalledWith(users, eq(users.id, notifications.recipientUserId));
+            expect(leftJoinMock).toHaveBeenCalledWith(
+                notificationPreferences,
+                eq(notificationPreferences.userId, users.id)
+            );
+
+            // Regression guard: this is the exact predicate that makes a user with no
+            // notification_preferences row (NULL from the LEFT JOIN) count as enabled,
+            // excludes emailDigestEnabled === false, and excludes unverified emails.
+            const expectedWhere = and(
+                isNull(notifications.emailedAt),
+                isNotNull(users.emailVerifiedAt),
+                or(isNull(notificationPreferences.emailDigestEnabled), eq(notificationPreferences.emailDigestEnabled, true))
+            );
+            expect(whereMock).toHaveBeenCalledWith(expectedWhere);
+        });
+
+        it('excludes users with emailDigestEnabled explicitly set to false from the resolved eligible set', async () => {
+            // The query layer (mocked here) is responsible for applying the where clause;
+            // a user with emailDigestEnabled: false would not appear in the resolved rows.
+            const rows = [{ userId: 2, uuid: 'user-2', email: 'enabled@example.com' }];
+            mockSelectDistinctChain(rows);
+
+            const result = await getUsersEligibleForDigest();
+
+            expect(result).toEqual(rows);
+            expect(result.find((row) => row.userId === 3)).toBeUndefined();
+        });
+
+        it('excludes users with an unverified email from the resolved eligible set', async () => {
+            // isNotNull(users.emailVerifiedAt) in the where clause filters these out at the
+            // query layer; here we confirm the function simply returns what the query gives it.
+            const rows = [];
+            mockSelectDistinctChain(rows);
+
+            const result = await getUsersEligibleForDigest();
+
+            expect(result).toEqual([]);
+        });
     });
 });

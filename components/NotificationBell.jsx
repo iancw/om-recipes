@@ -38,9 +38,14 @@ export default function NotificationBell() {
     }, []);
 
     useEffect(() => {
-        void refresh();
+        const timeoutId = setTimeout(() => {
+            void refresh();
+        }, 0);
         const interval = setInterval(refresh, 60000);
-        return () => clearInterval(interval);
+        return () => {
+            clearTimeout(timeoutId);
+            clearInterval(interval);
+        };
     }, [refresh]);
 
     useEffect(() => {

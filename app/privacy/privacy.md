@@ -6,6 +6,7 @@ We collect the following categories of information:
 
 * **Account information.** When you register, we collect your email address and any profile information you choose to provide, such as a display name or links to your other public profiles.
 * **Content you submit.** We collect the recipes, photographs, sample images, image metadata (including camera EXIF data), descriptions, and other materials you upload to the Site.
+* **Activity and notification records.** We record certain activity related to your account, such as when someone saves your recipe or adds a sample image to it, so that we can show you relevant notifications and, if you opt in, include them in an email digest.
 * **Authentication and security information.** To protect the Site and your account, we collect information related to sign-in attempts, session activity, the IP address you connect from, and your browser user agent.
 * **Usage information.** With your consent, we collect aggregate analytics about how the Site is used, such as the pages you visit and the actions you take, to help us understand traffic and improve the Site.
 
@@ -24,7 +25,7 @@ We use the information we collect to:
 
 ## Email addresses
 
-We treat your email address as confidential. **We do not sell, rent, or trade your email address, and we do not share or disclose it to third parties for their own marketing purposes.** Your email address is used only to authenticate you, to send transactional messages directly related to your account (such as sign-in links and security notices), and to respond to you when you contact us. Your email address is not displayed publicly on the Site.
+We treat your email address as confidential. **We do not sell, rent, or trade your email address, and we do not share or disclose it to third parties for their own marketing purposes.** Your email address is used only to authenticate you, to send transactional messages directly related to your account (such as sign-in links and security notices), to send you an optional daily activity digest if you have that feature enabled, and to respond to you when you contact us. You can turn the activity digest off at any time from your account settings, or by using the one-click unsubscribe link included in every digest email. Your email address is not displayed publicly on the Site.
 
 ## Cookies and analytics
 
@@ -45,7 +46,7 @@ We will never share or disclose your personal information for any other purpose 
 
 ## Data retention
 
-We retain your account information for as long as your account remains active. Content you publish is retained until you remove it or close your account, subject to the license described in our Terms and Conditions and to limited backups maintained for security and disaster-recovery purposes. We retain security-related logs for a reasonable period in order to investigate incidents and protect the Site.
+We retain your account information for as long as your account remains active. Content you publish is retained until you remove it or close your account, subject to the license described in our Terms and Conditions and to limited backups maintained for security and disaster-recovery purposes. We retain security-related logs for a reasonable period in order to investigate incidents and protect the Site. We retain notification records for a limited period and then automatically delete them.
 
 ## Security
 

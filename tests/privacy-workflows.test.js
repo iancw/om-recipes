@@ -203,6 +203,8 @@ describe('privacy workflows', () => {
             () => makeSelectChain([]),
             () => makeSelectChain([]),
             () => makeSelectChain([]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
             () => makeSelectChain([])
         );
 
@@ -282,6 +284,8 @@ describe('privacy workflows', () => {
                         createdAt: new Date('2026-04-15T00:00:00Z')
                     }
                 ]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
             () => makeSelectChain([]),
             () => makeSelectChain([]),
             () => makeSelectChain([]),
@@ -366,6 +370,8 @@ describe('privacy workflows', () => {
             () => ({ where: vi.fn(() => Promise.resolve()) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
             () => ({ where: vi.fn(() => Promise.resolve()) })
         );
 
@@ -375,7 +381,7 @@ describe('privacy workflows', () => {
         });
 
         expect(deleteImagesByIdsMock).toHaveBeenCalledWith([700, 701]);
-        expect(deleteMock).toHaveBeenCalledTimes(5);
+        expect(deleteMock).toHaveBeenCalledTimes(7);
         expect(updateMock).toHaveBeenCalledTimes(2);
     });
 
@@ -406,6 +412,11 @@ describe('privacy workflows', () => {
             }),
             () => ({
                 where: vi.fn(() => ({
+                    returning: vi.fn(() => Promise.resolve([]))
+                }))
+            }),
+            () => ({
+                where: vi.fn(() => ({
                     returning: vi.fn(() => Promise.resolve([{ id: 3 }]))
                 }))
             }),
@@ -421,6 +432,7 @@ describe('privacy workflows', () => {
         expect(summary).toEqual({
             deletedMagicLinks: 1,
             deletedSessions: 1,
+            deletedNotifications: 0,
             expiredExportArtifactsCleared: 1,
             deletedPrivacyRequests: 1,
             deletedAbandonedUploads: 1

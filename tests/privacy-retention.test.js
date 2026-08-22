@@ -10,6 +10,7 @@ describe('privacy retention config', () => {
         expect(config.exportArtifactRetentionHours).toBe(24);
         expect(config.privacyRequestAuditRetentionDays).toBe(30);
         expect(config.abandonedUploadRetentionHours).toBe(24);
+        expect(config.notificationRetentionDays).toBe(90);
     });
 
     it('parses configured override values', () => {
@@ -18,7 +19,8 @@ describe('privacy retention config', () => {
             AUTH_SESSION_RETENTION_DAYS: '45',
             PRIVACY_EXPORT_RETENTION_HOURS: '48',
             PRIVACY_REQUEST_AUDIT_RETENTION_DAYS: '60',
-            ABANDONED_UPLOAD_RETENTION_HOURS: '72'
+            ABANDONED_UPLOAD_RETENTION_HOURS: '72',
+            NOTIFICATION_RETENTION_DAYS: '120'
         });
 
         expect(config.magicLinkRetentionDays).toBe(10);
@@ -26,6 +28,7 @@ describe('privacy retention config', () => {
         expect(config.exportArtifactRetentionHours).toBe(48);
         expect(config.privacyRequestAuditRetentionDays).toBe(60);
         expect(config.abandonedUploadRetentionHours).toBe(72);
+        expect(config.notificationRetentionDays).toBe(120);
     });
 
     it('rejects invalid values', () => {

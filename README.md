@@ -98,6 +98,7 @@ Frequently used environment variables in this project include:
 - `PRIVACY_EXPORT_RETENTION_HOURS`
 - `PRIVACY_REQUEST_AUDIT_RETENTION_DAYS`
 - `ABANDONED_UPLOAD_RETENTION_HOURS`
+- `NOTIFICATIONS_UNSUBSCRIBE_SECRET`
 
 The exact set you need depends on which parts of the app you are working on. Recipe browsing and most database-backed development primarily depend on the Netlify runtime and database connection; auth, uploads, image processing, and backups each require additional configuration.
 

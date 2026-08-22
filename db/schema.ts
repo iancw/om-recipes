@@ -22,6 +22,7 @@ import {
  */
 
 export const recipeTypeEnum = pgEnum('recipe_type', ['COLOR', 'MONO']);
+export const notificationTypeEnum = pgEnum('notification_type', ['new_recipe', 'recipe_saved', 'sample_image_added']);
 
 export const users = pgTable(
     'users',
@@ -420,13 +421,63 @@ export const modeSlotAssignments = pgTable(
     ]
 );
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const notifications = pgTable(
+    'notifications',
+    {
+        id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+        uuid: uuid('uuid').defaultRandom().notNull(),
+        recipientUserId: integer('recipient_user_id')
+            .notNull()
+            .references(() => users.id, { onDelete: 'cascade' }),
+        type: notificationTypeEnum('type').notNull(),
+        recipeId: integer('recipe_id')
+            .notNull()
+            .references(() => recipes.id, { onDelete: 'cascade' }),
+        actorAuthorId: integer('actor_author_id').references(() => authors.id, { onDelete: 'set null' }),
+        sampleImageId: integer('sample_image_id').references(() => images.id, { onDelete: 'set null' }),
+        dedupeKey: text('dedupe_key').notNull(),
+        readAt: timestamp('read_at', { withTimezone: true }),
+        emailedAt: timestamp('emailed_at', { withTimezone: true }),
+        createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+    },
+    (t) => [
+        uniqueIndex('notifications_uuid_unique').on(t.uuid),
+        uniqueIndex('notifications_dedupe_key_unique').on(t.dedupeKey),
+        index('notifications_recipient_user_id_read_at_idx').on(t.recipientUserId, t.readAt),
+        index('notifications_recipient_user_id_created_at_idx').on(t.recipientUserId, t.createdAt),
+        index('notifications_emailed_at_idx').on(t.emailedAt).where(sql`${t.emailedAt} is null`)
+    ]
+);
+
+export const notificationPreferences = pgTable(
+    'notification_preferences',
+    {
+        id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+        userId: integer('user_id')
+            .notNull()
+            .references(() => users.id, { onDelete: 'cascade' }),
+        notifyNewRecipe: boolean('notify_new_recipe').notNull().default(false),
+        notifySampleImage: boolean('notify_sample_image').notNull().default(true),
+        notifySave: boolean('notify_save').notNull().default(true),
+        emailDigestEnabled: boolean('email_digest_enabled').notNull().default(true),
+        createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+        updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+    },
+    (t) => [uniqueIndex('notification_preferences_user_id_unique').on(t.userId)]
+);
+
+export const usersRelations = relations(users, ({ many, one }) => ({
     authors: many(authors),
     magicLinks: many(authMagicLinks),
     sessions: many(authSessions),
     privacyRequests: many(privacyRequests),
     savedRecipes: many(savedRecipes),
-    modeSlotAssignments: many(modeSlotAssignments)
+    modeSlotAssignments: many(modeSlotAssignments),
+    notifications: many(notifications),
+    notificationPreferences: one(notificationPreferences, {
+        fields: [users.id],
+        references: [notificationPreferences.userId]
+    })
 }));
 
 export const authorsRelations = relations(authors, ({ one, many }) => ({
@@ -546,5 +597,31 @@ export const modeSlotAssignmentsRelations = relations(modeSlotAssignments, ({ on
     recipe: one(recipes, {
         fields: [modeSlotAssignments.recipeId],
         references: [recipes.id]
+    })
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+    recipient: one(users, {
+        fields: [notifications.recipientUserId],
+        references: [users.id]
+    }),
+    recipe: one(recipes, {
+        fields: [notifications.recipeId],
+        references: [recipes.id]
+    }),
+    actorAuthor: one(authors, {
+        fields: [notifications.actorAuthorId],
+        references: [authors.id]
+    }),
+    sampleImage: one(images, {
+        fields: [notifications.sampleImageId],
+        references: [images.id]
+    })
+}));
+
+export const notificationPreferencesRelations = relations(notificationPreferences, ({ one }) => ({
+    user: one(users, {
+        fields: [notificationPreferences.userId],
+        references: [users.id]
     })
 }));

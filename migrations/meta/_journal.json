@@ -148,6 +148,13 @@
       "when": 1782267887583,
       "tag": "0020_curly_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787369009756,
+      "tag": "0021_sudden_malice",
+      "breakpoints": true
     }
   ]
 }

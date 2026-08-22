@@ -5,6 +5,7 @@ import Link from 'next/link';
 import LogoutButton from 'components/LogoutButton';
 import LoginButton from 'components/LoginButton';
 import MobileMenu from 'components/MobileMenu';
+import NotificationBell from 'components/NotificationBell';
 import { cn } from 'lib/cn';
 import { authedNavItems, publicNavItems } from 'lib/navigation.js';
 
@@ -40,6 +41,7 @@ export default function HeaderNav() {
 
     return (
         <>
+            {isLoggedIn ? <NotificationBell /> : null}
             <div className="nav-desktop items-center gap-4">
                 <ul className="flex flex-wrap gap-2">
                     {visibleNavItems.map((item) => (

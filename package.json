@@ -23,7 +23,8 @@
     "db:backup:object-storage": "node scripts/backup-database-to-object-storage.mjs",
     "image:migrate-bucket": "node scripts/migrate-image-bucket.mjs",
     "image:rerun-resize": "node scripts/rerun-image-resize.mjs",
-    "privacy:cleanup": "node scripts/privacy-retention-cleanup.mjs"
+    "privacy:cleanup": "node scripts/privacy-retention-cleanup.mjs",
+    "email:test-digest": "node --import tsx/esm scripts/send-test-digest-email.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^10.6.0",

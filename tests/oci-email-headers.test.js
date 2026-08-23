@@ -72,7 +72,7 @@ describe('sendEmail optional headers', () => {
         });
 
         const parsed = JSON.parse(capturedBody);
-        expect(parsed.headers).toEqual({ 'List-Unsubscribe': '<https://example.com/unsub>' });
+        expect(parsed.headerFields).toEqual({ 'List-Unsubscribe': '<https://example.com/unsub>' });
     });
 
     it('omits the headers field from the payload when not provided', async () => {

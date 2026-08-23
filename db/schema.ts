@@ -459,7 +459,7 @@ export const notificationPreferences = pgTable(
         notifyNewRecipe: boolean('notify_new_recipe').notNull().default(false),
         notifySampleImage: boolean('notify_sample_image').notNull().default(true),
         notifySave: boolean('notify_save').notNull().default(true),
-        emailDigestEnabled: boolean('email_digest_enabled').notNull().default(true),
+        emailDigestEnabled: boolean('email_digest_enabled').notNull().default(false),
         createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
         updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
     },

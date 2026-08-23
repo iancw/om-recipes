@@ -1,0 +1,1 @@
+ALTER TABLE "notification_preferences" ALTER COLUMN "email_digest_enabled" SET DEFAULT false;

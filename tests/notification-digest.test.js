@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { and, eq, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 
 let selectMock;
 let selectDistinctMock;
@@ -115,8 +115,8 @@ describe('daily digest', () => {
             return { whereMock, leftJoinMock, innerJoinMock, fromMock };
         }
 
-        it('joins on notification_preferences and filters with a where clause that treats a missing preferences row (NULL) as digest-enabled', async () => {
-            const rows = [{ userId: 1, uuid: 'user-1', email: 'no-prefs@example.com' }];
+        it('joins on notification_preferences and filters with a where clause that requires an explicit opt-in, excluding a missing preferences row (NULL)', async () => {
+            const rows = [{ userId: 1, uuid: 'user-1', email: 'opted-in@example.com' }];
             const { whereMock, leftJoinMock, innerJoinMock, fromMock } = mockSelectDistinctChain(rows);
 
             const result = await getUsersEligibleForDigest();
@@ -129,13 +129,13 @@ describe('daily digest', () => {
                 eq(notificationPreferences.userId, users.id)
             );
 
-            // Regression guard: this is the exact predicate that makes a user with no
-            // notification_preferences row (NULL from the LEFT JOIN) count as enabled,
-            // excludes emailDigestEnabled === false, and excludes unverified emails.
+            // Regression guard: the digest is opt-in, so a user with no notification_preferences
+            // row (NULL from the LEFT JOIN) must NOT count as enabled — only an explicit
+            // emailDigestEnabled = true row makes a user eligible. Also excludes unverified emails.
             const expectedWhere = and(
                 isNull(notifications.emailedAt),
                 isNotNull(users.emailVerifiedAt),
-                or(isNull(notificationPreferences.emailDigestEnabled), eq(notificationPreferences.emailDigestEnabled, true))
+                eq(notificationPreferences.emailDigestEnabled, true)
             );
             expect(whereMock).toHaveBeenCalledWith(expectedWhere);
         });

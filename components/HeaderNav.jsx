@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import Link from 'next/link';
 import LogoutButton from 'components/LogoutButton';
 import LoginButton from 'components/LoginButton';
@@ -9,8 +9,26 @@ import NotificationBell from 'components/NotificationBell';
 import { cn } from 'lib/cn';
 import { authedNavItems, publicNavItems } from 'lib/navigation.js';
 
+// Keep in sync with the `.nav-desktop` / `.nav-mobile` breakpoint in components/header.jsx.
+const DESKTOP_NAV_QUERY = '(min-width: 1024px)';
+
+function useIsDesktopNav() {
+    const [isDesktop, setIsDesktop] = useState(false);
+
+    useLayoutEffect(() => {
+        const mql = window.matchMedia(DESKTOP_NAV_QUERY);
+        const update = () => setIsDesktop(mql.matches);
+        update();
+        mql.addEventListener('change', update);
+        return () => mql.removeEventListener('change', update);
+    }, []);
+
+    return isDesktop;
+}
+
 export default function HeaderNav() {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const isDesktop = useIsDesktopNav();
 
     useEffect(() => {
         const controller = new AbortController();
@@ -38,10 +56,10 @@ export default function HeaderNav() {
     }, []);
 
     const visibleNavItems = isLoggedIn ? authedNavItems : publicNavItems;
+    const notificationBell = isLoggedIn ? <NotificationBell /> : null;
 
     return (
         <>
-            {isLoggedIn ? <NotificationBell /> : null}
             <div className="nav-desktop items-center gap-4">
                 <ul className="flex flex-wrap gap-2">
                     {visibleNavItems.map((item) => (
@@ -58,10 +76,12 @@ export default function HeaderNav() {
                         </li>
                     ))}
                 </ul>
+                {isDesktop ? notificationBell : null}
                 <div>{isLoggedIn ? <LogoutButton /> : <LoginButton />}</div>
             </div>
 
-            <div className="nav-mobile">
+            <div className="nav-mobile flex-wrap items-center justify-end gap-2">
+                {isDesktop ? null : notificationBell}
                 <MobileMenu navItems={visibleNavItems} isLoggedIn={isLoggedIn} />
             </div>
         </>

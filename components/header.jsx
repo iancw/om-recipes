@@ -8,7 +8,7 @@ export function Header() {
         <header className="relative sticky top-0 z-40 -mx-4 mb-8 border-b border-border/70 bg-background/85 px-4 backdrop-blur-sm sm:-mx-6 sm:px-6">
             <style>{`
                 .nav-desktop { display: none; }
-                .nav-mobile  { display: block; }
+                .nav-mobile  { display: flex; }
                 @media (min-width: 1024px) {
                     .nav-desktop { display: flex; }
                     .nav-mobile  { display: none; }
@@ -28,7 +28,7 @@ export function Header() {
                         </div>
                     </div>
                 </Link>
-                <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end">
+                <div className="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
                     <HeaderNav />
                 </div>
             </nav>

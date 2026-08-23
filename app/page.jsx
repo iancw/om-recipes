@@ -5,7 +5,7 @@ import Link from 'next/link';
 import RecipeCard from "../components/recipe-card.jsx";
 import { Badge } from "../components/ui/badge.jsx";
 import { Button, buttonVariants } from "../components/ui/button.jsx";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card.jsx";
+import { Card, CardContent } from "../components/ui/card.jsx";
 import { Dialog, DialogContent } from "../components/ui/dialog.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select.jsx";
@@ -45,6 +45,15 @@ function TogglePill({ checked, label, onClick }) {
     >
       {label}
     </button>
+  );
+}
+
+function FilterGroup({ label, children }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm font-medium text-muted-foreground">{label}</span>
+      {children}
+    </div>
   );
 }
 
@@ -282,10 +291,13 @@ export default function Page() {
 
   const isModalOpen = selectedRecipe != null;
 
-  const comparisonImageLabels = useMemo(
-    () => getAvailableComparisonImageLabels(results),
-    [results]
-  );
+  const comparisonImageLabelsRef = useRef([]);
+  const comparisonImageLabels = useMemo(() => {
+    if (loading) return comparisonImageLabelsRef.current;
+    const labels = getAvailableComparisonImageLabels(results);
+    comparisonImageLabelsRef.current = labels;
+    return labels;
+  }, [results, loading]);
 
   const imageOptions = useMemo(
     () => [
@@ -497,164 +509,134 @@ export default function Page() {
 
   return (
     <div className="flex w-full flex-col gap-8 pb-10 pt-2">
+      <h1 className="sr-only">OM System Recipes</h1>
       <Card className="overflow-hidden border-border/60 bg-card/80">
-        <CardContent className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,1.1fr)] lg:p-8">
-          <div className="space-y-5">
-            <Badge>Recipe Library</Badge>
-            <div className="space-y-3">
-              <h1 className="max-w-3xl">OM System Recipes</h1>
-              <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
-                Discover and share color and monochrome recipes for Olympus and OM System cameras.
-              </p>
+        <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+          <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-3">
+            <Input
+              type="text"
+              name="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search recipes..."
+              className="min-w-[200px] flex-1"
+            />
+            <Button type="submit">Search</Button>
+            <div className="flex items-center gap-2">
+              <label htmlFor="recipe-sort-by" className="text-sm font-medium text-muted-foreground">
+                Sort
+              </label>
+              <Select value={sortBy} onValueChange={(value) => setSortBy(value || DEFAULT_RECIPE_SORT)}>
+                <SelectTrigger id="recipe-sort-by" aria-label="Sort recipes" className="w-[180px] justify-between">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RECIPE_SORT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </div>
-          <div className="grid gap-4">
-            <Card className="border-border/60 bg-background/55">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Search Recipes</CardTitle>
-                <CardDescription>Find by author, recipe name, or description.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
-                  <Input
-                    type="text"
-                    name="search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search recipes..."
-                    className="flex-1"
+          </form>
+
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <FilterGroup label="View">
+              <div aria-labelledby="recipe-image-group-label" className="flex flex-wrap items-center gap-2">
+                <span id="recipe-image-group-label" className="sr-only">
+                  Image view
+                </span>
+                <TogglePill
+                  checked={selectedImageOption === SAMPLE_IMAGE_SELECTION}
+                  label="Author sample"
+                  onClick={() => setSelectedImageOption(SAMPLE_IMAGE_SELECTION)}
+                />
+                {imageOptions.length === 2 ? (
+                  <TogglePill
+                    checked={selectedImageOption === imageOptions[1].value}
+                    label={imageOptions[1].label}
+                    onClick={() => setSelectedImageOption(imageOptions[1].value)}
                   />
-                  <Button type="submit" className="sm:self-start">
-                    Search
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="border-border/60 bg-background/55">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Image View</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div aria-labelledby="recipe-image-group-label" className="flex flex-wrap items-center gap-2">
-                    <span id="recipe-image-group-label" className="sr-only">
-                      Image view
-                    </span>
-                    <TogglePill
-                      checked={selectedImageOption === SAMPLE_IMAGE_SELECTION}
-                      label="Author sample"
-                      onClick={() => setSelectedImageOption(SAMPLE_IMAGE_SELECTION)}
-                    />
-                    {imageOptions.length === 2 ? (
-                      <TogglePill
-                        checked={selectedImageOption === imageOptions[1].value}
-                        label={imageOptions[1].label}
-                        onClick={() => setSelectedImageOption(imageOptions[1].value)}
-                      />
-                    ) : imageOptions.length > 2 ? (
-                      <Select
-                        value={selectedImageOption !== SAMPLE_IMAGE_SELECTION ? selectedImageOption : ""}
-                        onValueChange={(val) => setSelectedImageOption(val || SAMPLE_IMAGE_SELECTION)}
-                      >
-                        <SelectTrigger className={selectedImageOption !== SAMPLE_IMAGE_SELECTION ? "border-primary ring-4 ring-primary/20" : ""}>
-                          <SelectValue placeholder="Comparison image" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {imageOptions.slice(1).map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : null}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-border/60 bg-background/55">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Sort</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <Select value={sortBy} onValueChange={(value) => setSortBy(value || DEFAULT_RECIPE_SORT)}>
-                      <SelectTrigger id="recipe-sort-by" aria-label="Sort recipes" className="w-full justify-between">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RECIPE_SORT_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-border/60 bg-background/55">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Filters</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-5">
-                  <div className="space-y-3">
-                    <div className="text-sm font-medium text-foreground">Recipe type</div>
-                    <div role="radiogroup" aria-labelledby="recipe-type-filter-label" className="flex flex-wrap gap-2">
-                      <span id="recipe-type-filter-label" className="sr-only">
-                        Recipe type filter
-                      </span>
-                      <TogglePill
-                        checked={recipeType === RECIPE_TYPE_FILTER_VALUES.ALL}
-                        label="All types"
-                        onClick={() => setRecipeType(RECIPE_TYPE_FILTER_VALUES.ALL)}
-                      />
-                      <TogglePill
-                        checked={recipeType === RECIPE_TYPE_FILTER_VALUES.COLOR}
-                        label="Color"
-                        onClick={() => setRecipeType(RECIPE_TYPE_FILTER_VALUES.COLOR)}
-                      />
-                      <TogglePill
-                        checked={recipeType === RECIPE_TYPE_FILTER_VALUES.MONO}
-                        label="Monochrome"
-                        onClick={() => setRecipeType(RECIPE_TYPE_FILTER_VALUES.MONO)}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="text-sm font-medium text-foreground">Library</div>
-                    <div role="radiogroup" aria-labelledby="recipe-filter-group-label" className="flex flex-wrap gap-2">
-                      <span id="recipe-filter-group-label" className="sr-only">
-                        Recipe filter
-                      </span>
-                      <TogglePill
-                        checked={!onlyMine && !onlySaved}
-                        label="All"
-                        onClick={() => {
-                          setOnlyMine(false);
-                          setOnlySaved(false);
-                        }}
-                      />
-                      <TogglePill
-                        checked={onlyMine}
-                        label="Mine"
-                        onClick={() => {
-                          setOnlyMine(true);
-                          setOnlySaved(false);
-                        }}
-                      />
-                      <TogglePill
-                        checked={onlySaved}
-                        label="Saved"
-                        onClick={() => {
-                          setOnlySaved(true);
-                          setOnlyMine(false);
-                        }}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                ) : imageOptions.length > 2 ? (
+                  <Select
+                    value={selectedImageOption !== SAMPLE_IMAGE_SELECTION ? selectedImageOption : ""}
+                    onValueChange={(val) => setSelectedImageOption(val || SAMPLE_IMAGE_SELECTION)}
+                  >
+                    <SelectTrigger
+                      className={cn(
+                        "w-[190px]",
+                        selectedImageOption !== SAMPLE_IMAGE_SELECTION ? "border-primary ring-4 ring-primary/20" : ""
+                      )}
+                    >
+                      <SelectValue placeholder="Comparison image" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {imageOptions.slice(1).map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+              </div>
+            </FilterGroup>
+
+            <FilterGroup label="Type">
+              <div role="radiogroup" aria-labelledby="recipe-type-filter-label" className="flex flex-wrap gap-2">
+                <span id="recipe-type-filter-label" className="sr-only">
+                  Recipe type filter
+                </span>
+                <TogglePill
+                  checked={recipeType === RECIPE_TYPE_FILTER_VALUES.ALL}
+                  label="All types"
+                  onClick={() => setRecipeType(RECIPE_TYPE_FILTER_VALUES.ALL)}
+                />
+                <TogglePill
+                  checked={recipeType === RECIPE_TYPE_FILTER_VALUES.COLOR}
+                  label="Color"
+                  onClick={() => setRecipeType(RECIPE_TYPE_FILTER_VALUES.COLOR)}
+                />
+                <TogglePill
+                  checked={recipeType === RECIPE_TYPE_FILTER_VALUES.MONO}
+                  label="Monochrome"
+                  onClick={() => setRecipeType(RECIPE_TYPE_FILTER_VALUES.MONO)}
+                />
+              </div>
+            </FilterGroup>
+
+            <FilterGroup label="Library">
+              <div role="radiogroup" aria-labelledby="recipe-filter-group-label" className="flex flex-wrap gap-2">
+                <span id="recipe-filter-group-label" className="sr-only">
+                  Recipe filter
+                </span>
+                <TogglePill
+                  checked={!onlyMine && !onlySaved}
+                  label="All"
+                  onClick={() => {
+                    setOnlyMine(false);
+                    setOnlySaved(false);
+                  }}
+                />
+                <TogglePill
+                  checked={onlyMine}
+                  label="Mine"
+                  onClick={() => {
+                    setOnlyMine(true);
+                    setOnlySaved(false);
+                  }}
+                />
+                <TogglePill
+                  checked={onlySaved}
+                  label="Saved"
+                  onClick={() => {
+                    setOnlySaved(true);
+                    setOnlyMine(false);
+                  }}
+                />
+              </div>
+            </FilterGroup>
           </div>
         </CardContent>
       </Card>

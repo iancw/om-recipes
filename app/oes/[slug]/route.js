@@ -39,9 +39,6 @@ export async function GET(_request, { params }) {
     }
 
     const recipeSettings = normalizeRecipeRow(rows[0]);
-    if (recipeSettings.type === 'MONO') {
-        return new Response('Monochrome recipes do not support OES downloads yet.', { status: 409 });
-    }
     const xml = makeOESXml(recipeSettings);
 
     return new Response(xml, {

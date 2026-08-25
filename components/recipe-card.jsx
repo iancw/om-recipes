@@ -83,7 +83,7 @@ export default function RecipeCard({
   const slug = recipe?.slug ?? '';
   const oesHref = slug ? `/oes/${slug}.oes` : '#';
   const recipeType = String(recipe?.type ?? 'COLOR').toUpperCase();
-  const canDownloadOes = Boolean(slug && recipeType === 'COLOR');
+  const canDownloadOes = Boolean(slug);
 
   const authorLinks = useMemo(() => {
     const social = recipe?.authorSocial ?? {};
@@ -406,10 +406,6 @@ export default function RecipeCard({
                 >
                   OM Workspace Batch Processing File
                 </a>
-              ) : recipeType === 'MONO' ? (
-                <p className="max-w-xs text-sm text-muted-foreground">
-                  OM Workspace `.oes` downloads are not available for monochrome recipes yet.
-                </p>
               ) : null}
               {downloadImageHref && (
                 <Button

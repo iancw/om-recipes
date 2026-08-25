@@ -27,7 +27,7 @@ describe('OES download route', () => {
         makeOESXmlMock = vi.fn(() => '<xml />');
     });
 
-    it('returns 409 for monochrome recipes', async () => {
+    it('builds OES XML for monochrome recipes', async () => {
         selectMock = vi.fn(() =>
             makeSelectChain([
                 {
@@ -36,7 +36,10 @@ describe('OES download route', () => {
                     colorSettings: {},
                     monoSettings: {
                         monochromeProfile: 'MONOTONE',
-                        monochromeColor: 'Yellow'
+                        monochromeColor: 'Yellow Filter',
+                        monochromeColorStrength: 2,
+                        filmGrain: 'Low',
+                        filmHue: 'Sepia'
                     }
                 }
             ])
@@ -47,9 +50,18 @@ describe('OES download route', () => {
             params: Promise.resolve({ slug: 'mono-recipe.oes' })
         });
 
-        expect(response.status).toBe(409);
-        await expect(response.text()).resolves.toContain('Monochrome recipes do not support OES downloads yet.');
-        expect(makeOESXmlMock).not.toHaveBeenCalled();
+        expect(response.status).toBe(200);
+        expect(makeOESXmlMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: 'MONO',
+                monochromeColor: 'Yellow Filter',
+                monochromeColorStrength: 2,
+                filmGrain: 'Low',
+                filmHue: 'Sepia',
+                supportsOesDownload: true
+            })
+        );
+        await expect(response.text()).resolves.toBe('<xml />');
     });
 
     it('builds OES XML for color recipes', async () => {

@@ -89,8 +89,8 @@ export default function HowToPage() {
                     </h2>
                     <p className="text-muted-foreground leading-relaxed">
                         OES files are OM Workspace presets that apply a saved set of image
-                        adjustments — including Color Profile / Color Recipe settings — to any raw
-                        (.ORF) file. Note that an OES file can&rsquo;t be loaded directly into the
+                        adjustments — including Color Profile / Color Recipe or Monochrome
+                        Creator settings — to any raw (.ORF) file. Note that an OES file can&rsquo;t be loaded directly into the
                         camera; for that, see the{' '}
                         <a href="#camera-upload" className="text-primary underline-offset-4 hover:underline">
                             JPG workflow

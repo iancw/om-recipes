@@ -9,6 +9,8 @@ import {
     getRecipeModalImageUrl,
     getPrimarySampleImage,
     getRecipePreviewImage,
+    getVisibleComparisonImages,
+    getVisibleSampleImages,
     SAMPLE_IMAGE_SELECTION
 } from '../lib/recipe-image-selection.js';
 
@@ -220,6 +222,52 @@ describe('recipe image selection helpers', () => {
         };
 
         expect(getRecipeDownloadUrl(recipe)).toBe('https://images.om-recipes.com/original/a.jpg');
+    });
+
+    it('lists visible sample images with the primary one first', () => {
+        const recipe = {
+            sampleImages: [
+                { id: 'sample-1' },
+                { id: 'sample-2', isPrimary: true },
+                { id: 'sample-3' }
+            ]
+        };
+
+        expect(getVisibleSampleImages(recipe)).toEqual([
+            { id: 'sample-2', isPrimary: true },
+            { id: 'sample-1' },
+            { id: 'sample-3' }
+        ]);
+    });
+
+    it('excludes hidden images from the visible sample list', () => {
+        const recipe = {
+            sampleImages: [
+                { id: 'sample-hidden', isPrimary: true, copyright: false },
+                { id: 'sample-visible-1' },
+                { id: 'sample-visible-2' }
+            ]
+        };
+
+        expect(getVisibleSampleImages(recipe)).toEqual([
+            { id: 'sample-visible-1' },
+            { id: 'sample-visible-2' }
+        ]);
+    });
+
+    it('lists visible comparison images and excludes hidden ones', () => {
+        const recipe = {
+            comparisonImages: [
+                { id: 'comparison-1', label: 'lighthouse' },
+                { id: 'comparison-hidden', label: 'watch hill', copyright: false },
+                { id: 'comparison-2', label: 'city' }
+            ]
+        };
+
+        expect(getVisibleComparisonImages(recipe)).toEqual([
+            { id: 'comparison-1', label: 'lighthouse' },
+            { id: 'comparison-2', label: 'city' }
+        ]);
     });
 
     it('returns no URLs for hidden images', () => {

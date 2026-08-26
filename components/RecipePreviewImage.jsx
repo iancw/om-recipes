@@ -22,7 +22,9 @@ export default function RecipePreviewImage({
     sizes,
     imageClassName,
     placeholderClassName,
-    style
+    style,
+    naturalSize = false,
+    onLoad
 }) {
     const [imageState, setImageState] = useState(() => ({
         trackedSrc: src,
@@ -98,6 +100,23 @@ export default function RecipePreviewImage({
                     </p>
                 </div>
             </div>
+        );
+    }
+
+    if (naturalSize) {
+        return (
+            <img
+                src={retryableSrc}
+                alt={alt}
+                style={style}
+                className={imageClassName}
+                onLoad={onLoad}
+                onError={() => setImageState({
+                    trackedSrc: src,
+                    status: 'processing',
+                    retryAttempt
+                })}
+            />
         );
     }
 

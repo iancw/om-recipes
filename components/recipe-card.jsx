@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import RecipeSettings from "./RecipeSettings";
 import { useRouter } from 'next/navigation';
 import AuthorSocialLinks from './AuthorSocialLinks';
@@ -17,6 +17,7 @@ import { Card, CardContent } from './ui/card.jsx';
 import { Input } from './ui/input.jsx';
 import { Textarea } from './ui/textarea.jsx';
 import { cn } from '../lib/cn.js';
+import { trackGA4Event } from '../lib/ga4-events.js';
 
 function isRedirectError(error) {
   if (!error || typeof error !== 'object') return false;
@@ -30,7 +31,8 @@ export default function RecipeCard({
   updateRecipeAction,
   deleteRecipeAction,
   onSavedChange,
-  selectedImageOption = SAMPLE_IMAGE_SELECTION
+  selectedImageOption = SAMPLE_IMAGE_SELECTION,
+  viewContext = 'page'
 }) {
   const router = useRouter();
 
@@ -84,6 +86,21 @@ export default function RecipeCard({
   const oesHref = slug ? `/oes/${slug}.oes` : '#';
   const recipeType = String(recipe?.type ?? 'COLOR').toUpperCase();
   const canDownloadOes = Boolean(slug);
+
+  const lastTrackedRecipeIdRef = useRef(null);
+  useEffect(() => {
+    const id = recipe?.id;
+    if (id == null) return;
+    if (lastTrackedRecipeIdRef.current === id) return;
+    lastTrackedRecipeIdRef.current = id;
+
+    trackGA4Event('recipe_view', {
+      recipe_id: id,
+      recipe_slug: slug,
+      recipe_type: recipeType,
+      view_context: viewContext
+    });
+  }, [recipe?.id, slug, recipeType, viewContext]);
 
   const authorLinks = useMemo(() => {
     const social = recipe?.authorSocial ?? {};
@@ -218,6 +235,12 @@ export default function RecipeCard({
 
       const nextSaved = Boolean(body?.isSaved);
       setIsRecipeSaved(nextSaved);
+      trackGA4Event('recipe_save', {
+        recipe_id: recipe?.id,
+        recipe_slug: slug,
+        recipe_type: recipeType,
+        action: nextSaved ? 'save' : 'unsave'
+      });
       if (typeof onSavedChange === 'function') {
         onSavedChange(recipe?.id, nextSaved);
       }
@@ -230,6 +253,12 @@ export default function RecipeCard({
 
   const handleDownloadRecipeImage = async () => {
     if (!downloadImageHref || isDownloadingImage) return;
+
+    trackGA4Event('image_download', {
+      recipe_id: recipe?.id,
+      recipe_slug: slug,
+      recipe_type: recipeType
+    });
 
     setDownloadError('');
 
@@ -403,6 +432,13 @@ export default function RecipeCard({
                   href={oesHref}
                   download
                   className={buttonVariants({ className: 'no-underline' })}
+                  onClick={() =>
+                    trackGA4Event('oes_download', {
+                      recipe_id: recipe?.id,
+                      recipe_slug: slug,
+                      recipe_type: recipeType
+                    })
+                  }
                 >
                   OM Workspace Batch Processing File
                 </a>

@@ -698,6 +698,7 @@ export default function Page() {
                 recipe={selectedRecipe}
                 onSavedChange={handleSavedChange}
                 selectedImageOption={selectedImageOption}
+                viewContext="modal"
               />
             </div>
           </div>

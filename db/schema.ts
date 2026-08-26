@@ -115,6 +115,11 @@ export const privacyRequests = pgTable(
     'privacy_requests',
     {
         id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+
+        // Public identifier used in URLs (the download link), so request
+        // ids can't be enumerated/guessed via the sequential integer id.
+        uuid: uuid('uuid').defaultRandom().notNull(),
+
         userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
         subjectUserUuid: uuid('subject_user_uuid').notNull(),
         requestType: varchar('request_type', { length: 32 }).notNull(),
@@ -130,6 +135,7 @@ export const privacyRequests = pgTable(
         completedAt: timestamp('completed_at', { withTimezone: true })
     },
     (t) => [
+        uniqueIndex('privacy_requests_uuid_unique').on(t.uuid),
         index('privacy_requests_user_id_idx').on(t.userId),
         index('privacy_requests_subject_user_uuid_idx').on(t.subjectUserUuid),
         index('privacy_requests_type_status_idx').on(t.requestType, t.status),

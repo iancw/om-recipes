@@ -328,6 +328,102 @@ describe('privacy workflows', () => {
         expect(getObjectMock).not.toHaveBeenCalled();
     });
 
+    it('auto-fails a stale processing export request instead of blocking retries forever', async () => {
+        const { startPrivacyExport } = await import('../lib/privacy.js');
+
+        selectHandlers.push(
+            () =>
+                makeSelectChain([
+                    {
+                        id: 40,
+                        requestType: 'export',
+                        status: 'processing',
+                        updatedAt: new Date('2026-04-01T00:00:00Z')
+                    }
+                ]),
+            () => makeSelectChain([
+                {
+                    id: 5,
+                    uuid: 'user-uuid',
+                    email: 'ian@example.com',
+                    emailVerifiedAt: null,
+                    createdAt: new Date('2026-04-01T00:00:00Z'),
+                    updatedAt: new Date('2026-04-01T00:00:00Z')
+                }
+            ]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([]),
+            () => makeSelectChain([])
+        );
+
+        insertHandlers.push(() => ({
+            values: vi.fn(() => ({
+                returning: vi.fn(() =>
+                    Promise.resolve([
+                        {
+                            id: 41,
+                            userId: 5,
+                            subjectUserUuid: 'user-uuid',
+                            requestType: 'export'
+                        }
+                    ])
+                )
+            }))
+        }));
+
+        updateHandlers.push(
+            () => ({
+                set: vi.fn((values) => {
+                    expect(values.status).toBe('failed');
+                    return { where: vi.fn(() => Promise.resolve()) };
+                })
+            }),
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            }),
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            })
+        );
+
+        const requestId = await startPrivacyExport({
+            userId: 5,
+            userUuid: 'user-uuid'
+        });
+
+        expect(requestId).toBe(41);
+        expect(updateMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('still blocks a retry while a processing export request is recent', async () => {
+        const { startPrivacyExport } = await import('../lib/privacy.js');
+
+        selectHandlers.push(() =>
+            makeSelectChain([
+                {
+                    id: 42,
+                    requestType: 'export',
+                    status: 'processing',
+                    updatedAt: new Date()
+                }
+            ])
+        );
+
+        await expect(startPrivacyExport({ userId: 5, userUuid: 'user-uuid' })).rejects.toThrow(
+            'A data export is already in progress.'
+        );
+
+        expect(insertMock).not.toHaveBeenCalled();
+        expect(updateMock).not.toHaveBeenCalled();
+    });
+
     it('deletes owned images and account rows during account erasure', async () => {
         const { startAccountDeletion } = await import('../lib/privacy.js');
 

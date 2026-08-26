@@ -131,7 +131,7 @@ export default async function Page() {
                                                 </div>
                                                 {canDownload ? (
                                                     <Link
-                                                        href={`/profile/privacy-requests/${request.id}/download`}
+                                                        href={`/profile/privacy-requests/${request.uuid}/download`}
                                                         className={buttonVariants({ variant: 'outline' })}
                                                     >
                                                         Download export

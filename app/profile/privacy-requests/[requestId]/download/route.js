@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { getSession } from '../../../../../lib/auth.js';
 import { getDownloadablePrivacyExport } from '../../../../../lib/privacy.js';
 
-function parseRequestId(value) {
-    const parsed = Number(value);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseRequestUuid(value) {
+    return typeof value === 'string' && UUID_PATTERN.test(value) ? value : null;
 }
 
 export async function GET(_request, { params }) {
@@ -14,13 +15,13 @@ export async function GET(_request, { params }) {
     }
 
     const resolvedParams = await params;
-    const requestId = parseRequestId(resolvedParams?.requestId);
-    if (!requestId) {
+    const requestUuid = parseRequestUuid(resolvedParams?.requestId);
+    if (!requestUuid) {
         return new NextResponse('Invalid request id', { status: 400 });
     }
 
     const artifact = await getDownloadablePrivacyExport({
-        requestId,
+        requestUuid,
         userId: session.user.id
     });
 

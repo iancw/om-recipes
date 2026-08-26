@@ -1,0 +1,2 @@
+ALTER TABLE "privacy_requests" ADD COLUMN "uuid" uuid DEFAULT gen_random_uuid() NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "privacy_requests_uuid_unique" ON "privacy_requests" USING btree ("uuid");

@@ -177,7 +177,7 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
 
         expect(result).toEqual({
             ok: true,
-            fullSizeUrl: 'https://images.om-recipes.com/original/authors/foo/recipes/img.jpg',
+            fullSizeUrl: 'https://images.om-recipes.com/authors/foo/recipes/img.jpg',
             resizeAttempted: true,
             resizeSucceeded: false,
             resizeSkipped: false
@@ -427,7 +427,7 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
 
         expect(result).toEqual({
             ok: true,
-            fullSizeUrl: 'https://images.om-recipes.com/original/authors/foo/recipes/img.jpg',
+            fullSizeUrl: 'https://images.om-recipes.com/authors/foo/recipes/img.jpg',
             resizeAttempted: false,
             resizeSucceeded: true,
             resizeSkipped: true
@@ -460,7 +460,7 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
 
         expect(result).toEqual({
             ok: true,
-            fullSizeUrl: 'https://images.om-recipes.com/original/authors/foo/recipes/img.jpg',
+            fullSizeUrl: 'https://images.om-recipes.com/authors/foo/recipes/img.jpg',
             resizeAttempted: true,
             resizeSucceeded: false,
             resizeSkipped: false

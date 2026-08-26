@@ -135,9 +135,16 @@ function formatAssociation(association) {
     return association.recipeSlug;
 }
 
+class AmbiguousAssociationError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'AmbiguousAssociationError';
+    }
+}
+
 function selectAssociationForImage({ imageId, comparisonAssociations, sampleAssociations }) {
     if (comparisonAssociations.length > 1) {
-        throw new Error(
+        throw new AmbiguousAssociationError(
             `Ambiguous comparison associations for image_id ${imageId}: ${comparisonAssociations.map(formatAssociation).join(', ')}`
         );
     }
@@ -147,7 +154,7 @@ function selectAssociationForImage({ imageId, comparisonAssociations, sampleAsso
     }
 
     if (sampleAssociations.length > 1) {
-        throw new Error(
+        throw new AmbiguousAssociationError(
             `Ambiguous sample associations for image_id ${imageId}: ${sampleAssociations.map(formatAssociation).join(', ')}`
         );
     }
@@ -235,6 +242,10 @@ export async function fetchLegacyRepoImageRows(sql, { warn = console.warn } = {}
                 comparisonLabel: association.comparisonLabel
             });
         } catch (error) {
+            if (error instanceof AmbiguousAssociationError) {
+                throw error;
+            }
+
             if (error instanceof Error) {
                 warn(error.message);
                 continue;

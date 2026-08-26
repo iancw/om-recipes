@@ -53,7 +53,7 @@ describe('recipe image asset helpers', () => {
                     960: 'https://images.om-recipes.com/960/authors/a/recipes/r/image.jpg',
                     1200: 'https://images.om-recipes.com/1200/authors/a/recipes/r/image.jpg',
                     1600: 'https://images.om-recipes.com/1600/authors/a/recipes/r/image.jpg',
-                    original: 'https://images.om-recipes.com/original/authors/a/recipes/r/image.jpg'
+                    original: 'https://images.om-recipes.com/authors/a/recipes/r/image.jpg'
                 }
             })
         );

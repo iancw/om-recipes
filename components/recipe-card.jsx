@@ -6,11 +6,15 @@ import { useRouter } from 'next/navigation';
 import AuthorSocialLinks from './AuthorSocialLinks';
 import DeleteConfirmationModal from './DeleteConfirmationModal.jsx';
 import RecipePreviewImage from './RecipePreviewImage.jsx';
+import RecipeSampleStrip from './RecipeSampleStrip.jsx';
 import {
   getRecipeCardPreviewUrl,
   getRecipeDownloadUrl,
+  getVisibleComparisonImages,
+  getVisibleSampleImages,
   SAMPLE_IMAGE_SELECTION
 } from '../lib/recipe-image-selection.js';
+import { getRecipePath } from '../lib/recipe-url.js';
 import { Badge } from './ui/badge.jsx';
 import { Button, buttonVariants } from './ui/button.jsx';
 import { Card, CardContent } from './ui/card.jsx';
@@ -32,7 +36,8 @@ export default function RecipeCard({
   deleteRecipeAction,
   onSavedChange,
   selectedImageOption = SAMPLE_IMAGE_SELECTION,
-  viewContext = 'page'
+  viewContext = 'page',
+  showSampleStrip = false
 }) {
   const router = useRouter();
 
@@ -78,6 +83,17 @@ export default function RecipeCard({
   useEffect(() => {
     setIsRecipeSaved(Boolean(recipe?.isSaved));
   }, [recipe?.isSaved, recipe?.id]);
+
+  const visibleSampleImages = useMemo(() => getVisibleSampleImages(recipe), [recipe]);
+  const visibleComparisonImages = useMemo(() => getVisibleComparisonImages(recipe), [recipe]);
+  const gallerySampleImages = useMemo(
+    () => [...visibleSampleImages, ...visibleComparisonImages],
+    [visibleSampleImages, visibleComparisonImages]
+  );
+  const showSamplesStrip = Boolean(showSampleStrip)
+    && selectedImageOption === SAMPLE_IMAGE_SELECTION
+    && gallerySampleImages.length > 1;
+  const recipeHref = getRecipePath(recipe);
 
   const downloadImageHref = getRecipeDownloadUrl(recipe);
   const previewUrl = getRecipeCardPreviewUrl(recipe, selectedImageOption);
@@ -469,7 +485,13 @@ export default function RecipeCard({
 
         {(editing || recipeDescription || recipeSourceUrl || previewUrl) && (
           <div className="recipe-notes-image-row rounded-[1.5rem] border border-border/70 bg-muted/25 p-4 sm:p-5">
-            {previewUrl && (
+            {showSamplesStrip ? (
+              <RecipeSampleStrip
+                key={recipe?.id ?? recipe?.uuid ?? recipe?.slug}
+                images={gallerySampleImages}
+                recipeHref={recipeHref}
+              />
+            ) : previewUrl && (
               <div className="flex flex-[0_0_auto] flex-col items-center">
                 <RecipePreviewImage
                   src={previewUrl}

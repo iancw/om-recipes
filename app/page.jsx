@@ -699,6 +699,7 @@ export default function Page() {
                 onSavedChange={handleSavedChange}
                 selectedImageOption={selectedImageOption}
                 viewContext="modal"
+                showSampleStrip
               />
             </div>
           </div>

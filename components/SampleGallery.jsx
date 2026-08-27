@@ -1,5 +1,5 @@
 'use client';
-import React, { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import AuthorSocialLinks from './AuthorSocialLinks';
 import DeleteConfirmationModal from './DeleteConfirmationModal.jsx';
@@ -9,6 +9,47 @@ import {
   getImagePreviewUrl,
   getRecipeModalImageUrl
 } from '../lib/recipe-image-selection';
+
+const IMAGE_QUERY_PARAM = 'image';
+// Native pushState/replaceState don't fire `popstate`, so same-tab writes below
+// dispatch this to notify the useSyncExternalStore subscription of the change.
+const IMAGE_PARAM_CHANGE_EVENT = 'samplegallery:imageparamchange';
+
+function getImageParamSnapshot() {
+  return new URLSearchParams(window.location.search).get(IMAGE_QUERY_PARAM);
+}
+
+function getImageParamServerSnapshot() {
+  return null;
+}
+
+function subscribeToImageParam(onChange) {
+  window.addEventListener('popstate', onChange);
+  window.addEventListener(IMAGE_PARAM_CHANGE_EVENT, onChange);
+  return () => {
+    window.removeEventListener('popstate', onChange);
+    window.removeEventListener(IMAGE_PARAM_CHANGE_EVENT, onChange);
+  };
+}
+
+// The `image` query param is the single source of truth for which image is open,
+// mirroring the raw window.history approach used for the recipe-selection modal on
+// the home page (app/page.jsx) so deep-linking works the same way across the app.
+function writeImageParam(uuid, historyMethod) {
+  const url = new URL(window.location.href);
+  const params = new URLSearchParams(url.search);
+  if (uuid) {
+    params.set(IMAGE_QUERY_PARAM, uuid);
+  } else {
+    params.delete(IMAGE_QUERY_PARAM);
+  }
+  const nextSearch = params.toString();
+  const nextHref = `${url.pathname}${nextSearch ? `?${nextSearch}` : ''}${url.hash}`;
+  const currentHref = `${url.pathname}${url.search}${url.hash}`;
+  if (nextHref === currentHref) return;
+  window.history[historyMethod]({}, '', nextHref);
+  window.dispatchEvent(new Event(IMAGE_PARAM_CHANGE_EVENT));
+}
 
 function collectSocialLinks(author) {
   if (!author) return [];
@@ -85,7 +126,6 @@ export default function SampleGallery({
   setPrimaryImageAction = null
 }) {
   const normalizedImages = useMemo(() => normalizeImages(images), [images]);
-  const [activeIndex, setActiveIndex] = useState(null);
   const [isDeletePending, startDeleteTransition] = useTransition();
   const [isPrimaryPending, startPrimaryTransition] = useTransition();
   const [deleteCandidate, setDeleteCandidate] = useState(null);
@@ -93,16 +133,27 @@ export default function SampleGallery({
   const [primaryError, setPrimaryError] = useState('');
   const router = useRouter();
 
+  // The `image` query param (read via useSyncExternalStore, so it stays in sync with
+  // both browser back/forward and our own same-tab history writes) is the single
+  // source of truth for which image is open — only one gallery instance's images
+  // will ever contain a match, so the other stays closed automatically.
+  const imageParam = useSyncExternalStore(subscribeToImageParam, getImageParamSnapshot, getImageParamServerSnapshot);
+  const activeIndex = useMemo(() => {
+    if (!imageParam) return null;
+    const idx = normalizedImages.findIndex((img) => img.uuid === imageParam);
+    return idx >= 0 ? idx : null;
+  }, [imageParam, normalizedImages]);
+
   const openModal = useCallback(
     (idx) => {
       if (!Number.isInteger(idx) || idx < 0 || idx >= normalizedImages.length) return;
-      setActiveIndex(idx);
+      writeImageParam(normalizedImages[idx]?.uuid ?? null, 'pushState');
     },
-    [normalizedImages.length]
+    [normalizedImages]
   );
 
   const closeModal = useCallback(() => {
-    setActiveIndex(null);
+    writeImageParam(null, 'replaceState');
   }, []);
 
   const showModal = activeIndex != null && activeIndex >= 0 && activeIndex < normalizedImages.length;
@@ -110,20 +161,16 @@ export default function SampleGallery({
   const hasMultiple = normalizedImages.length > 1;
 
   const goPrev = useCallback(() => {
-    if (!hasMultiple) return;
-    setActiveIndex((prev) => {
-      if (prev == null) return prev;
-      return (prev - 1 + normalizedImages.length) % normalizedImages.length;
-    });
-  }, [hasMultiple, normalizedImages.length]);
+    if (!hasMultiple || activeIndex == null) return;
+    const prevIdx = (activeIndex - 1 + normalizedImages.length) % normalizedImages.length;
+    writeImageParam(normalizedImages[prevIdx]?.uuid ?? null, 'pushState');
+  }, [hasMultiple, activeIndex, normalizedImages]);
 
   const goNext = useCallback(() => {
-    if (!hasMultiple) return;
-    setActiveIndex((prev) => {
-      if (prev == null) return prev;
-      return (prev + 1) % normalizedImages.length;
-    });
-  }, [hasMultiple, normalizedImages.length]);
+    if (!hasMultiple || activeIndex == null) return;
+    const nextIdx = (activeIndex + 1) % normalizedImages.length;
+    writeImageParam(normalizedImages[nextIdx]?.uuid ?? null, 'pushState');
+  }, [hasMultiple, activeIndex, normalizedImages]);
 
   useEffect(() => {
     if (!showModal) return undefined;
@@ -179,13 +226,13 @@ export default function SampleGallery({
       try {
         await deleteImageAction({ recipeId: Number(recipeId), imageId: deleteCandidate.id });
         setDeleteCandidate(null);
-        setActiveIndex(null);
+        closeModal();
         router.refresh();
       } catch (error) {
         setDeleteError(error?.message || 'Failed to delete sample image');
       }
     });
-  }, [canDelete, deleteCandidate, deleteImageAction, recipeId, router]);
+  }, [canDelete, closeModal, deleteCandidate, deleteImageAction, recipeId, router]);
 
   const handleSetPrimary = useCallback((image) => {
     if (!canSetPrimary || !setPrimaryImageAction || !Number.isFinite(Number(recipeId)) || image?.id == null || image?.isPrimary) {

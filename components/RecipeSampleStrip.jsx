@@ -51,6 +51,8 @@ export default function RecipeSampleStrip({ images, recipeHref }) {
     const showLinkTile = visibleImages.length > fit;
     const thumbnailImages = showLinkTile ? visibleImages.slice(0, Math.max(fit - 1, 0)) : visibleImages;
     const remainingCount = visibleImages.length - thumbnailImages.length;
+    const nextImage = visibleImages[thumbnailImages.length] ?? null;
+    const linkTileHref = nextImage?.uuid ? `${recipeHref}?image=${nextImage.uuid}` : recipeHref;
 
     const mainUrl = getImagePreviewUrl(activeImage);
     if (!mainUrl) return null;
@@ -100,7 +102,7 @@ export default function RecipeSampleStrip({ images, recipeHref }) {
                 })}
                 {showLinkTile && (
                     <Link
-                        href={recipeHref}
+                        href={linkTileHref}
                         title="See all samples on the full recipe page"
                         className="flex shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-xs font-medium text-muted-foreground no-underline transition-colors hover:border-primary/60 hover:text-foreground"
                         style={{ width: THUMB_SIZE, height: THUMB_SIZE }}

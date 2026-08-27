@@ -62,6 +62,7 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
                 label: recipeComparisonImages.label,
                 image: {
                     id: images.id,
+                    uuid: images.uuid,
                     copyright: images.copyright,
                     preparedObjectKey: images.preparedObjectKey,
                     smallUrl: images.smallUrl,
@@ -79,6 +80,7 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
             .select({
                 image: {
                     id: images.id,
+                    uuid: images.uuid,
                     copyright: images.copyright,
                     preparedObjectKey: images.preparedObjectKey,
                     smallUrl: images.smallUrl,

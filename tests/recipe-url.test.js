@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
     buildRecipeSearchParams,
+    fetchCanonicalRecipeIdentifier,
     findRecipeIndexByIdentifier,
     getRecipePath,
     getRecipeSelectionFromSearchParams,
@@ -63,5 +64,31 @@ describe('recipe-url helpers', () => {
     it('detects uuid-like identifiers', () => {
         expect(isUuidLike('123e4567-e89b-12d3-a456-426614174000')).toBe(true);
         expect(isUuidLike('portra-400')).toBe(false);
+    });
+});
+
+describe('fetchCanonicalRecipeIdentifier', () => {
+    it('returns the canonical slug from the resolver', async () => {
+        const fetchImpl = vi.fn(() =>
+            Promise.resolve({ ok: true, json: () => Promise.resolve({ canonical: 'ibd_glow' }) })
+        );
+        expect(await fetchCanonicalRecipeIdentifier('isaacbd_glow', { fetchImpl })).toBe('ibd_glow');
+        expect(fetchImpl).toHaveBeenCalledWith('/recipes/resolve?recipe=isaacbd_glow');
+    });
+
+    it('returns null on a 404', async () => {
+        const fetchImpl = vi.fn(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) }));
+        expect(await fetchCanonicalRecipeIdentifier('nope', { fetchImpl })).toBeNull();
+    });
+
+    it('returns null when fetch throws', async () => {
+        const fetchImpl = vi.fn(() => Promise.reject(new Error('offline')));
+        expect(await fetchCanonicalRecipeIdentifier('x', { fetchImpl })).toBeNull();
+    });
+
+    it('returns null for a blank identifier without calling fetch', async () => {
+        const fetchImpl = vi.fn();
+        expect(await fetchCanonicalRecipeIdentifier('  ', { fetchImpl })).toBeNull();
+        expect(fetchImpl).not.toHaveBeenCalled();
     });
 });

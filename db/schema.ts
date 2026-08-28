@@ -429,6 +429,22 @@ export const comments = pgTable(
     ]
 );
 
+export const recipeSlugAliases = pgTable(
+    'recipe_slug_aliases',
+    {
+        id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+        recipeId: integer('recipe_id')
+            .notNull()
+            .references(() => recipes.id, { onDelete: 'cascade' }),
+        slug: varchar('slug', { length: 255 }).notNull(),
+        createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+    },
+    (t) => [
+        uniqueIndex('recipe_slug_aliases_slug_unique').on(t.slug),
+        index('recipe_slug_aliases_recipe_id_idx').on(t.recipeId)
+    ]
+);
+
 // Tracks which recipes a user has loaded into each camera mode dial position and color profile slot.
 // modePosition: one of c1, c2, c3, c4, c5, pasmb (P/A/S/M/B shared position)
 // colorSlot: 1–4 (Color 1 through Color 4)
@@ -546,7 +562,8 @@ export const recipesRelations = relations(recipes, ({ one, many }) => ({
     sampleImages: many(recipeSampleImages),
     comparisonImages: many(recipeComparisonImages),
     savedByUsers: many(savedRecipes),
-    comments: many(comments)
+    comments: many(comments),
+    slugAliases: many(recipeSlugAliases)
 }));
 
 export const recipeColorSettingsRelations = relations(recipeColorSettings, ({ one }) => ({
@@ -608,6 +625,13 @@ export const commentsRelations = relations(comments, ({ one }) => ({
     author: one(authors, {
         fields: [comments.authorId],
         references: [authors.id]
+    })
+}));
+
+export const recipeSlugAliasesRelations = relations(recipeSlugAliases, ({ one }) => ({
+    recipe: one(recipes, {
+        fields: [recipeSlugAliases.recipeId],
+        references: [recipes.id]
     })
 }));
 

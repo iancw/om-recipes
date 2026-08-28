@@ -274,6 +274,39 @@ describe('recipe detail page redirects', () => {
         ).rejects.toThrow('REDIRECT:/recipes/portra-400');
     });
 
+    it('redirects an old slug alias to the canonical slug path', async () => {
+        getSessionMock = vi.fn(() => Promise.resolve(null));
+        getSavedRecipeIdsForUserMock = vi.fn(() => Promise.resolve(new Set()));
+
+        // 1st select: recipes by slug -> miss. 2nd select: alias lookup -> hit.
+        // 3rd select: recipes by id -> the recipe. Remaining selects (comparison /
+        // sample image queries) -> empty.
+        const responses = [
+            [], // recipes where slug = 'isaacbd_glow'
+            [{ recipeId: 123 }], // alias row
+            [
+                {
+                    id: 123,
+                    uuid: 'recipe-uuid',
+                    slug: 'ibd_glow',
+                    type: 'COLOR',
+                    authorId: 1,
+                    recipeName: 'Glow',
+                    authorName: 'ibd'
+                }
+            ]
+        ];
+        selectMock = vi.fn(() => makeSelectChain(responses.shift() ?? []));
+
+        const mod = await import('../app/recipes/[id]/page.jsx');
+
+        await expect(
+            mod.default({ params: Promise.resolve({ id: 'isaacbd_glow' }) })
+        ).rejects.toThrow('REDIRECT:/recipes/ibd_glow');
+
+        expect(permanentRedirectMock).toHaveBeenCalledWith('/recipes/ibd_glow');
+    });
+
     it('passes normalized monochrome settings to the recipe card', async () => {
         selectMock = vi.fn(() =>
             makeSelectChain([

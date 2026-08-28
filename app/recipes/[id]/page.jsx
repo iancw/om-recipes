@@ -10,6 +10,7 @@ import {
     recipeComparisonImages,
     recipeMonoSettings,
     recipeSampleImages,
+    recipeSlugAliases,
     recipes
 } from '../../../db/schema.ts';
 import { and, asc, eq, ilike, ne, or, sql } from 'drizzle-orm';
@@ -38,14 +39,13 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
     if (!v) return null;
     // Detect UUID format to avoid a Postgres type error when the param is a slug.
     const isUuid = isUuidLike(v);
-    const rows = await db
-        .select(
-            getRecipeSelectFields({
-                includeAuthorId: true,
-                includeAuthorSocial: true,
-                authorTable: authors
-            })
-        )
+    const selectFields = getRecipeSelectFields({
+        includeAuthorId: true,
+        includeAuthorSocial: true,
+        authorTable: authors
+    });
+    let rows = await db
+        .select(selectFields)
         .from(recipes)
         .leftJoin(authors, eq(authors.id, recipes.authorId))
         .leftJoin(recipeColorSettings, eq(recipeColorSettings.recipeId, recipes.id))
@@ -54,6 +54,26 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
         // "params: ,,1" in neon/drizzle errors when the route param is missing.
         .where(isUuid ? or(eq(recipes.slug, v), eq(recipes.uuid, v)) : eq(recipes.slug, v))
         .limit(1);
+
+    if (rows.length === 0) {
+        // Fall back to old slug aliases recorded on prior renames, then re-query
+        // the recipe by its stable id so callers redirect to the current slug.
+        const aliasRows = await db
+            .select({ recipeId: recipeSlugAliases.recipeId })
+            .from(recipeSlugAliases)
+            .where(eq(recipeSlugAliases.slug, v))
+            .limit(1);
+        if (aliasRows.length > 0) {
+            rows = await db
+                .select(selectFields)
+                .from(recipes)
+                .leftJoin(authors, eq(authors.id, recipes.authorId))
+                .leftJoin(recipeColorSettings, eq(recipeColorSettings.recipeId, recipes.id))
+                .leftJoin(recipeMonoSettings, eq(recipeMonoSettings.recipeId, recipes.id))
+                .where(eq(recipes.id, aliasRows[0].recipeId))
+                .limit(1);
+        }
+    }
 
     if (rows.length === 0) return null;
     const base = normalizeRecipeRow(rows[0]);
@@ -240,7 +260,8 @@ export default async function Page({ params }) {
     const userId = session?.user?.id ?? null;
     const recipe = await getRecipeByIdOrSlug(id, userId);
     if (!recipe) return notFound();
-    if (isUuidLike(id) && recipe.uuid === id && recipe.slug && recipe.slug !== id) {
+    // Any non-canonical identifier (old slug alias or uuid) redirects to the current slug.
+    if (recipe.slug && id && id !== recipe.slug) {
         permanentRedirect(getRecipePath(recipe));
     }
     const whiteBalance = getEquivalentWhiteBalance(recipe);

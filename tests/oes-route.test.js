@@ -97,4 +97,22 @@ describe('OES download route', () => {
         );
         await expect(response.text()).resolves.toBe('<xml />');
     });
+
+    it('serves the OES file when the slug is an old alias', async () => {
+        // 1st select: recipes by slug -> miss. 2nd: alias lookup -> hit. 3rd: recipes by id -> row.
+        const responses = [
+            [],
+            [{ recipeId: 42 }],
+            [{ slug: 'ibd_glow', type: 'COLOR', colorSettings: {}, monoSettings: {} }]
+        ];
+        selectMock = vi.fn(() => makeSelectChain(responses.shift() ?? []));
+
+        const mod = await import('../app/oes/[slug]/route.js');
+        const response = await mod.GET(new Request('https://example.com/oes/isaacbd_glow.oes'), {
+            params: Promise.resolve({ slug: 'isaacbd_glow.oes' })
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-disposition')).toContain('ibd_glow.oes');
+    });
 });

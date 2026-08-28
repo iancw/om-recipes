@@ -17,6 +17,7 @@
     "db:studio": "netlify dev:exec drizzle-kit studio",
     "db:import:om-recipes": "node scripts/import-om-recipes-to-db.mjs",
     "db:link:public-sample-image": "node scripts/link-public-sample-image.mjs",
+    "db:fix:recipe-slug": "node --env-file=.env.local --import tsx/esm scripts/fix-recipe-slug.mjs",
     "db:upload:comparison-images": "node scripts/upload-comparison-images.mjs",
     "db:backfill:recipe-fingerprints": "node --env-file=.env.local --import tsx/esm scripts/backfill-recipe-fingerprints.mjs",
     "db:backfill:recipe-color-settings": "node --env-file=.env.local --import tsx/esm scripts/backfill-recipe-color-settings.mjs",

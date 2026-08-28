@@ -11,6 +11,8 @@ import {
     recipes
 } from '../../db/schema.ts';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+
+import { resolveUniqueSlug, slugify } from '../../lib/recipe-slug.js';
 import {
     getObjectStorageClientFromEnv,
     getObjectStorageNamespaceFromEnv,
@@ -194,25 +196,6 @@ async function findRecipeByReference(recipeReference) {
         .limit(1);
 
     return slugRows[0] ?? null;
-}
-
-function slugify(value) {
-    return String(value ?? '')
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .replace(/-+/g, '-');
-}
-
-async function uniqueRecipeSlug(base) {
-    let slug = base;
-    for (let i = 1; i < 1000; i++) {
-        const existing = await db.select({ slug: recipes.slug }).from(recipes).where(eq(recipes.slug, slug)).limit(1);
-        if (existing.length === 0) return slug;
-        slug = `${base}-${i + 1}`;
-    }
-    throw new Error('Unable to generate a unique slug');
 }
 
 function normalizeRecipeType(recipeSettings) {
@@ -733,7 +716,7 @@ export async function prepareRecipeUploadAction({ parameters }) {
         if (shouldCreateRecipe) {
             const normalizedSourceUrl = normalizeOptionalUrl(sourceUrl);
             const baseSlug = `${slugify(author)}_${slugify(name)}`;
-            createdSlug = await uniqueRecipeSlug(baseSlug);
+            createdSlug = await resolveUniqueSlug({ base: baseSlug, recipeId: null });
             const recipeRow = await createRecipeWithSettings({
                 recipeValues: {
                     authorId,

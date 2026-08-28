@@ -15,6 +15,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { findOrCreateAuthorForUser, requireUser } from '../../../lib/auth.js';
 import { getRecipePath } from '../../../lib/recipe-url.js';
+import { applySlugChange, computeSlugBase, resolveUniqueSlug } from '../../../lib/recipe-slug.js';
 import { revalidatePublicRecipeCatalog } from '../../../lib/public-recipe-catalog-cache.js';
 import { addComment, deleteComment } from '../../../lib/comments.js';
 import { notifyRecipeCommented } from '../../../lib/notifications.js';
@@ -196,7 +197,8 @@ export async function updateRecipeAction(formData) {
             id: recipes.id,
             uuid: recipes.uuid,
             slug: recipes.slug,
-            type: recipes.type
+            type: recipes.type,
+            authorName: recipes.authorName
         })
         .from(recipes)
         .where(and(eq(recipes.id, recipeId), inArray(recipes.authorId, authorIds)))
@@ -244,8 +246,17 @@ export async function updateRecipeAction(formData) {
         .returning({ id: recipes.id, uuid: recipes.uuid, slug: recipes.slug });
 
     const r = updated[0];
+
+    const oldSlug = existing[0].slug;
+    const base = computeSlugBase({ authorName: existing[0].authorName, recipeName });
+    const newSlug = await resolveUniqueSlug({ base, recipeId });
+    const slugResult = await applySlugChange({ recipeId, oldSlug, newSlug });
+
     if (r) await revalidatePublicRecipeCatalog();
-    revalidatePath(getRecipePath(r));
+    revalidatePath(getRecipePath({ slug: oldSlug }));
+    if (slugResult.changed) {
+        revalidatePath(getRecipePath({ slug: slugResult.newSlug }));
+    }
 }
 
 export async function deleteMyRecipeAction(formData) {

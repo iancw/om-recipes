@@ -12,8 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { cn } from "../lib/cn.js";
 import { RECIPE_TYPE_FILTER_VALUES } from "../lib/recipe-data.js";
 import {
+  RECIPE_QUERY_PARAM,
   buildRecipeSearchParams,
   clearRecipeSearchParams,
+  fetchCanonicalRecipeIdentifier,
   findRecipeIndexByIdentifier,
   getCanonicalRecipeIdentifier,
   getRecipePath,
@@ -120,6 +122,8 @@ export default function Page() {
   });
   const activeResetRequestRef = useRef(null);
   const loadMoreSentinelRef = useRef(null);
+  const resolveAttemptsRef = useRef(new Set());
+  const syncSelectedRecipeRef = useRef(() => {});
 
   const updateWindowUrlSearch = useCallback((searchParams, historyMethod = "replaceState") => {
     const url = new URL(window.location.href);
@@ -406,9 +410,28 @@ export default function Page() {
     }
 
     if (!loadingRef.current && !loadingMoreRef.current && !hasMoreRef.current) {
-      setSelectedRecipeIndex(null);
+      const attempted = resolveAttemptsRef.current;
+      if (attempted.has(selection.value)) {
+        setSelectedRecipeIndex(null);
+        return;
+      }
+      attempted.add(selection.value);
+      void fetchCanonicalRecipeIdentifier(selection.value).then((canonical) => {
+        if (canonical && canonical !== selection.value) {
+          const nextParams = new URLSearchParams(window.location.search);
+          nextParams.set(RECIPE_QUERY_PARAM, canonical);
+          updateWindowUrlSearch(nextParams, "replaceState");
+          syncSelectedRecipeRef.current();
+        } else {
+          setSelectedRecipeIndex(null);
+        }
+      });
     }
-  }, [loadMoreRecipes, normalizeRecipeSelectionUrl]);
+  }, [loadMoreRecipes, normalizeRecipeSelectionUrl, updateWindowUrlSearch]);
+
+  useEffect(() => {
+    syncSelectedRecipeRef.current = syncSelectedRecipeFromLocation;
+  });
 
   useEffect(() => {
     syncSelectedRecipeFromLocation();

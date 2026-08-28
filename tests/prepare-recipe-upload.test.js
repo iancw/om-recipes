@@ -453,6 +453,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
     it('stores the image SHA-256 digest when creating upload metadata', async () => {
         selectResults = [
             [],
+            [],
             []
         ];
 
@@ -497,7 +498,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
     });
 
     it('persists camera metadata fields onto the image row when provided', async () => {
-        selectResults = [[], []];
+        selectResults = [[], [], []];
         queueNewRecipeInsertSequence();
 
         const { prepareRecipeUploadAction } = await loadActionsModule();
@@ -530,7 +531,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
     });
 
     it('defaults camera metadata fields to null when cameraMetadata is not provided', async () => {
-        selectResults = [[], []];
+        selectResults = [[], [], []];
         queueNewRecipeInsertSequence();
 
         const { prepareRecipeUploadAction } = await loadActionsModule();
@@ -555,7 +556,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
     });
 
     it('sanitizes a non-string camera metadata field to null instead of persisting it verbatim', async () => {
-        selectResults = [[], []];
+        selectResults = [[], [], []];
         queueNewRecipeInsertSequence();
 
         const { prepareRecipeUploadAction } = await loadActionsModule();
@@ -584,7 +585,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
     });
 
     it('truncates an overlong camera metadata field to 200 characters', async () => {
-        selectResults = [[], []];
+        selectResults = [[], [], []];
         queueNewRecipeInsertSequence();
 
         const { prepareRecipeUploadAction } = await loadActionsModule();
@@ -615,7 +616,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
     });
 
     it('sanitizes a whitespace-only camera metadata field to null', async () => {
-        selectResults = [[], []];
+        selectResults = [[], [], []];
         queueNewRecipeInsertSequence();
 
         const { prepareRecipeUploadAction } = await loadActionsModule();
@@ -1315,6 +1316,7 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
                           }
                       ];
             },
+            [],
             []
         ];
         queueNewRecipeInsertSequence();
@@ -1549,9 +1551,18 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
 
 describe('updateRecipeAction fingerprint sync', () => {
     it('mirrors MONO child settings back onto the legacy parent columns while refreshing fingerprints', async () => {
+        // Slug recompute-on-rename is covered by tests/recipe-slug-rename-action.test.js;
+        // stub it here so it does not consume this test's select/update queues.
+        vi.doMock('../lib/recipe-slug.js', () => ({
+            slugify: (v) => String(v ?? ''),
+            computeSlugBase: ({ authorName, recipeName }) => `${authorName ?? ''}_${recipeName ?? ''}`,
+            resolveUniqueSlug: ({ base }) => Promise.resolve(base),
+            applySlugChange: ({ oldSlug, newSlug }) => Promise.resolve({ changed: oldSlug !== newSlug, newSlug })
+        }));
+
         selectResults = [
             [{ id: 10 }],
-            [{ id: 777, uuid: 'recipe-uuid-1', slug: 'mono-recipe', type: 'MONO' }],
+            [{ id: 777, uuid: 'recipe-uuid-1', slug: 'mono-recipe', type: 'MONO', authorName: 'Mono Author' }],
             [
                 {
                     monochromeProfile: 'MONOTONE',

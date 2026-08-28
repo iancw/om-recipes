@@ -1,9 +1,10 @@
 import { db } from '../../../db/index.ts';
-import { recipeColorSettings, recipeMonoSettings, recipes } from '../../../db/schema.ts';
-import { eq } from 'drizzle-orm';
+import { recipeColorSettings, recipeMonoSettings, recipeSlugAliases, recipes } from '../../../db/schema.ts';
+import { eq, or } from 'drizzle-orm';
 
 import { makeOESXml } from '../../../lib/oes.js';
 import { getRecipeSelectFields, normalizeRecipeRow } from '../../../lib/recipe-data.js';
+import { isUuidLike } from '../../../lib/recipe-url.js';
 
 function isBlank(v) {
     return v == null || String(v).trim() === '';
@@ -26,26 +27,46 @@ export async function GET(_request, { params }) {
 
     const slug = stripOesExt(resolvedParams.slug);
 
-    const rows = await db
+    const isUuid = isUuidLike(slug);
+
+    let rows = await db
         .select(getRecipeSelectFields())
         .from(recipes)
         .leftJoin(recipeColorSettings, eq(recipeColorSettings.recipeId, recipes.id))
         .leftJoin(recipeMonoSettings, eq(recipeMonoSettings.recipeId, recipes.id))
-        .where(eq(recipes.slug, slug))
+        .where(isUuid ? or(eq(recipes.slug, slug), eq(recipes.uuid, slug)) : eq(recipes.slug, slug))
         .limit(1);
+
+    if (rows.length === 0) {
+        const aliasRows = await db
+            .select({ recipeId: recipeSlugAliases.recipeId })
+            .from(recipeSlugAliases)
+            .where(eq(recipeSlugAliases.slug, slug))
+            .limit(1);
+        if (aliasRows.length > 0) {
+            rows = await db
+                .select(getRecipeSelectFields())
+                .from(recipes)
+                .leftJoin(recipeColorSettings, eq(recipeColorSettings.recipeId, recipes.id))
+                .leftJoin(recipeMonoSettings, eq(recipeMonoSettings.recipeId, recipes.id))
+                .where(eq(recipes.id, aliasRows[0].recipeId))
+                .limit(1);
+        }
+    }
 
     if (rows.length === 0) {
         return new Response('Not Found', { status: 404 });
     }
 
     const recipeSettings = normalizeRecipeRow(rows[0]);
+    const canonicalSlug = recipeSettings.slug || slug;
     const xml = makeOESXml(recipeSettings);
 
     return new Response(xml, {
         status: 200,
         headers: {
             'content-type': 'application/xml; charset=utf-8',
-            'content-disposition': `attachment; filename="${slug}.oes"`,
+            'content-disposition': `attachment; filename="${canonicalSlug}.oes"`,
             'cache-control': 'public, max-age=3600'
         }
     });

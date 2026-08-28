@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 
 import RecipePreviewImage from './RecipePreviewImage.jsx';
-import { formatComparisonImageLabelForDisplay, getImagePreviewUrl } from '../lib/recipe-image-selection.js';
+import { formatComparisonImageLabelForDisplay, formatImageMetadataLine, getImagePreviewUrl } from '../lib/recipe-image-selection.js';
 import { cn } from '../lib/cn.js';
 
 const THUMB_SIZE = 52;
@@ -58,6 +58,7 @@ export default function RecipeSampleStrip({ images, recipeHref }) {
     if (!mainUrl) return null;
 
     const isShowingPrimary = activeIndex === 0;
+    const metadataLine = formatImageMetadataLine(activeImage);
 
     const handleMainImageLoad = (event) => {
         const img = event.target;
@@ -111,23 +112,33 @@ export default function RecipeSampleStrip({ images, recipeHref }) {
                     </Link>
                 )}
             </div>
-            <button
-                type="button"
-                onClick={() => setActiveIndex(0)}
-                title={isShowingPrimary ? 'Recipe sample image' : 'Back to primary sample image'}
-                aria-label={isShowingPrimary ? 'Recipe sample image' : 'Back to primary sample image'}
-                className="inline-block cursor-pointer overflow-hidden rounded-xl border border-border/60 p-0"
-            >
-                <RecipePreviewImage
-                    src={mainUrl}
-                    alt="Recipe Sample Image"
-                    naturalSize
-                    onLoad={handleMainImageLoad}
-                    imageClassName="block"
-                    style={{ maxWidth: MAIN_MAX_WIDTH, maxHeight: MAIN_MAX_HEIGHT, width: 'auto', height: 'auto' }}
-                    placeholderClassName="h-[260px] w-[320px]"
-                />
-            </button>
+            <div className="flex flex-col gap-1">
+                <button
+                    type="button"
+                    onClick={() => setActiveIndex(0)}
+                    title={isShowingPrimary ? 'Recipe sample image' : 'Back to primary sample image'}
+                    aria-label={isShowingPrimary ? 'Recipe sample image' : 'Back to primary sample image'}
+                    className="inline-block cursor-pointer overflow-hidden rounded-xl border border-border/60 p-0"
+                >
+                    <RecipePreviewImage
+                        src={mainUrl}
+                        alt="Recipe Sample Image"
+                        naturalSize
+                        onLoad={handleMainImageLoad}
+                        imageClassName="block"
+                        style={{ maxWidth: MAIN_MAX_WIDTH, maxHeight: MAIN_MAX_HEIGHT, width: 'auto', height: 'auto' }}
+                        placeholderClassName="h-[260px] w-[320px]"
+                    />
+                </button>
+                {metadataLine && (
+                    <p
+                        className="recipe-sample-exif m-0 text-xs text-muted-foreground"
+                        style={{ maxWidth: MAIN_MAX_WIDTH }}
+                    >
+                        {metadataLine}
+                    </p>
+                )}
+            </div>
         </div>
     );
 }

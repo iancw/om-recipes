@@ -8,8 +8,10 @@ import DeleteConfirmationModal from './DeleteConfirmationModal.jsx';
 import RecipePreviewImage from './RecipePreviewImage.jsx';
 import RecipeSampleStrip from './RecipeSampleStrip.jsx';
 import {
+  formatImageMetadataLine,
   getRecipeCardPreviewUrl,
   getRecipeDownloadUrl,
+  getRecipePreviewImage,
   getVisibleComparisonImages,
   getVisibleSampleImages,
   SAMPLE_IMAGE_SELECTION
@@ -97,6 +99,7 @@ export default function RecipeCard({
 
   const downloadImageHref = getRecipeDownloadUrl(recipe);
   const previewUrl = getRecipeCardPreviewUrl(recipe, selectedImageOption);
+  const previewImageMetadataLine = formatImageMetadataLine(getRecipePreviewImage(recipe, selectedImageOption));
 
   const slug = recipe?.slug ?? '';
   const oesHref = slug ? `/oes/${slug}.oes` : '#';
@@ -492,7 +495,7 @@ export default function RecipeCard({
                 recipeHref={recipeHref}
               />
             ) : previewUrl && (
-              <div className="flex flex-[0_0_auto] flex-col items-center">
+              <div className="flex flex-[0_0_auto] flex-col items-center gap-1">
                 <RecipePreviewImage
                   src={previewUrl}
                   alt="Recipe Sample Image"
@@ -502,6 +505,11 @@ export default function RecipeCard({
                   imageClassName="max-h-[300px] w-auto max-w-full rounded-xl border border-border/60 object-cover"
                   placeholderClassName="h-[300px] w-full max-w-[400px] rounded-xl border border-border/60 bg-background/70"
                 />
+                {previewImageMetadataLine && (
+                  <p className="recipe-sample-exif m-0 max-w-full text-xs text-muted-foreground">
+                    {previewImageMetadataLine}
+                  </p>
+                )}
               </div>
             )}
             {(editing || recipeDescription || recipeSourceUrl) && (

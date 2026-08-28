@@ -6,6 +6,7 @@ function buildPrepareParameters({ file, section, matchedRecipe, mode }) {
         sourceUrl: section.form.sourceUrl,
         imageMeta: { name: file.name, type: file.type, size: file.size },
         recipeSettings: section.recipeSettings,
+        cameraMetadata: file.cameraMetadata ?? null,
         mode,
         matchedRecipe
     };

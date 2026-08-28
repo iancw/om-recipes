@@ -23,6 +23,7 @@
     "db:backup:object-storage": "node scripts/backup-database-to-object-storage.mjs",
     "image:migrate-bucket": "node scripts/migrate-image-bucket.mjs",
     "image:rerun-resize": "node scripts/rerun-image-resize.mjs",
+    "image:reprocess-exif": "node --env-file=.env.local --import tsx/esm scripts/reprocess-exif-metadata.mjs",
     "privacy:cleanup": "node scripts/privacy-retention-cleanup.mjs",
     "email:test-digest": "node --import tsx/esm scripts/send-test-digest-email.mjs"
   },

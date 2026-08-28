@@ -37,6 +37,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# EXIF reprocess working dir
+/.exif-reprocess/
+
 # local env files
 .env*
 !.env.example

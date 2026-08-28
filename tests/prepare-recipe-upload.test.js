@@ -496,6 +496,152 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(notifyNewRecipeMock).toHaveBeenCalledTimes(1);
     });
 
+    it('persists camera metadata fields onto the image row when provided', async () => {
+        selectResults = [[], []];
+        queueNewRecipeInsertSequence();
+
+        const { prepareRecipeUploadAction } = await loadActionsModule();
+
+        const result = await prepareRecipeUploadAction({
+            parameters: {
+                author: 'Author',
+                name: 'Recipe Name',
+                notes: '',
+                imageMeta: { name: 'photo.jpg', type: 'image/jpeg', size: 4096 },
+                recipeSettings: makeColorRecipeSettings(),
+                cameraMetadata: {
+                    camera: 'OM-3',
+                    lens: 'OLYMPUS M.17mm F1.8',
+                    shutterSpeed: '1/800',
+                    aperture: '8.0',
+                    focalLength: '17.0 mm',
+                    iso: '320'
+                }
+            }
+        });
+
+        expect(result.ok).toBe(true);
+        expect(capturedImageValues.camera).toBe('OM-3');
+        expect(capturedImageValues.lens).toBe('OLYMPUS M.17mm F1.8');
+        expect(capturedImageValues.shutterSpeed).toBe('1/800');
+        expect(capturedImageValues.aperture).toBe('8.0');
+        expect(capturedImageValues.focalLength).toBe('17.0 mm');
+        expect(capturedImageValues.iso).toBe('320');
+    });
+
+    it('defaults camera metadata fields to null when cameraMetadata is not provided', async () => {
+        selectResults = [[], []];
+        queueNewRecipeInsertSequence();
+
+        const { prepareRecipeUploadAction } = await loadActionsModule();
+
+        const result = await prepareRecipeUploadAction({
+            parameters: {
+                author: 'Author',
+                name: 'Recipe Name',
+                notes: '',
+                imageMeta: { name: 'photo.jpg', type: 'image/jpeg', size: 4096 },
+                recipeSettings: makeColorRecipeSettings()
+            }
+        });
+
+        expect(result.ok).toBe(true);
+        expect(capturedImageValues.camera).toBeNull();
+        expect(capturedImageValues.lens).toBeNull();
+        expect(capturedImageValues.shutterSpeed).toBeNull();
+        expect(capturedImageValues.aperture).toBeNull();
+        expect(capturedImageValues.focalLength).toBeNull();
+        expect(capturedImageValues.iso).toBeNull();
+    });
+
+    it('sanitizes a non-string camera metadata field to null instead of persisting it verbatim', async () => {
+        selectResults = [[], []];
+        queueNewRecipeInsertSequence();
+
+        const { prepareRecipeUploadAction } = await loadActionsModule();
+
+        const result = await prepareRecipeUploadAction({
+            parameters: {
+                author: 'Author',
+                name: 'Recipe Name',
+                notes: '',
+                imageMeta: { name: 'photo.jpg', type: 'image/jpeg', size: 4096 },
+                recipeSettings: makeColorRecipeSettings(),
+                cameraMetadata: {
+                    camera: { malicious: 'object' },
+                    lens: 'OLYMPUS M.17mm F1.8',
+                    shutterSpeed: '1/800',
+                    aperture: '8.0',
+                    focalLength: '17.0 mm',
+                    iso: '320'
+                }
+            }
+        });
+
+        expect(result.ok).toBe(true);
+        expect(capturedImageValues.camera).toBeNull();
+        expect(capturedImageValues.lens).toBe('OLYMPUS M.17mm F1.8');
+    });
+
+    it('truncates an overlong camera metadata field to 200 characters', async () => {
+        selectResults = [[], []];
+        queueNewRecipeInsertSequence();
+
+        const { prepareRecipeUploadAction } = await loadActionsModule();
+
+        const overlong = 'x'.repeat(500);
+
+        const result = await prepareRecipeUploadAction({
+            parameters: {
+                author: 'Author',
+                name: 'Recipe Name',
+                notes: '',
+                imageMeta: { name: 'photo.jpg', type: 'image/jpeg', size: 4096 },
+                recipeSettings: makeColorRecipeSettings(),
+                cameraMetadata: {
+                    camera: overlong,
+                    lens: null,
+                    shutterSpeed: null,
+                    aperture: null,
+                    focalLength: null,
+                    iso: null
+                }
+            }
+        });
+
+        expect(result.ok).toBe(true);
+        expect(capturedImageValues.camera).toBe('x'.repeat(200));
+        expect(capturedImageValues.camera.length).toBe(200);
+    });
+
+    it('sanitizes a whitespace-only camera metadata field to null', async () => {
+        selectResults = [[], []];
+        queueNewRecipeInsertSequence();
+
+        const { prepareRecipeUploadAction } = await loadActionsModule();
+
+        const result = await prepareRecipeUploadAction({
+            parameters: {
+                author: 'Author',
+                name: 'Recipe Name',
+                notes: '',
+                imageMeta: { name: 'photo.jpg', type: 'image/jpeg', size: 4096 },
+                recipeSettings: makeColorRecipeSettings(),
+                cameraMetadata: {
+                    camera: '   ',
+                    lens: null,
+                    shutterSpeed: null,
+                    aperture: null,
+                    focalLength: null,
+                    iso: null
+                }
+            }
+        });
+
+        expect(result.ok).toBe(true);
+        expect(capturedImageValues.camera).toBeNull();
+    });
+
     it('binds matched-recipe uploads to the existing recipe on the image row', async () => {
         selectResults = [
             [

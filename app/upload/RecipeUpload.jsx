@@ -8,7 +8,7 @@ import { Alert } from 'components/alert';
 import { Button } from 'components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from 'components/ui/card';
 import { cn } from 'lib/cn';
-import { parseRecipeSettingsFromExif, RECIPE_EXIFTOOL_ARGS } from 'lib/exifparse';
+import { parseRecipeSettingsFromExif, parseCameraMetadataFromExif, RECIPE_EXIFTOOL_ARGS } from 'lib/exifparse';
 import { computeRecipeFingerprint } from 'lib/recipeFingerprint.js';
 
 import { buildUploadSections } from './group-upload-candidates.js';
@@ -64,6 +64,8 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     if (!result?.success) {
       throw new Error(result?.error || 'Unable to read EXIF metadata');
     }
+
+    file.cameraMetadata = parseCameraMetadataFromExif(result.data);
 
     return parseRecipeSettingsFromExif(result.data);
   };

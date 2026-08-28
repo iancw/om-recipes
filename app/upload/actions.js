@@ -36,6 +36,7 @@ import { findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
 import { getRecipePath } from '../../lib/recipe-url.js';
 import { revalidatePublicRecipeCatalog } from '../../lib/public-recipe-catalog-cache.js';
 import { notifyNewRecipe, notifySampleImageAdded } from '../../lib/notifications.js';
+import { toStoredCameraMetadataText } from '../../lib/exif-reprocess.js';
 
 const ORIGINAL_BUCKET = process.env.OCI_IMAGES_ORIGINAL_BUCKET;
 const RESIZED_BUCKET = process.env.OCI_IMAGES_PROCESSED_BUCKET;
@@ -600,7 +601,6 @@ async function sha256HexFromObjectStorageResponse(response) {
     throw new Error('Unsupported uploaded object body type');
 }
 
-// Always be sanitizing data in real sites!
 export async function prepareRecipeUploadAction({ parameters }) {
     try {
         if (uploadsAreDisabled()) {
@@ -609,7 +609,7 @@ export async function prepareRecipeUploadAction({ parameters }) {
 
         const session = await requireUser();
 
-        const { author, name, notes, sourceUrl, imageMeta, recipeSettings, mode, matchedRecipe } = parameters ?? {};
+        const { author, name, notes, sourceUrl, imageMeta, recipeSettings, cameraMetadata, mode, matchedRecipe } = parameters ?? {};
         const explicitAttachRequested = mode === 'attach';
         const explicitAttachRecipe = explicitAttachRequested ? normalizeRecipeReference(matchedRecipe) : null;
 
@@ -785,7 +785,13 @@ export async function prepareRecipeUploadAction({ parameters }) {
                 validExif: true,
                 sha256Hash: imageSha,
                 preparedRecipeId: createdRecipeId,
-                preparedObjectKey: objectKey
+                preparedObjectKey: objectKey,
+                camera: toStoredCameraMetadataText(cameraMetadata?.camera),
+                lens: toStoredCameraMetadataText(cameraMetadata?.lens),
+                shutterSpeed: toStoredCameraMetadataText(cameraMetadata?.shutterSpeed),
+                aperture: toStoredCameraMetadataText(cameraMetadata?.aperture),
+                focalLength: toStoredCameraMetadataText(cameraMetadata?.focalLength),
+                iso: toStoredCameraMetadataText(cameraMetadata?.iso)
             })
             .returning({ id: images.id });
 

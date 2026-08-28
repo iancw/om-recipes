@@ -396,4 +396,72 @@ describe('submitUploadSection', () => {
             fileName: 'second.jpg'
         });
     });
+
+    it('passes each file\'s cameraMetadata through to prepare', async () => {
+        const prepare = vi.fn().mockResolvedValue({
+            ok: true,
+            shouldCreateRecipe: false,
+            imageId: 10,
+            parUrl: 'https://upload/1',
+            matchedRecipe: { id: 1, slug: 'recipe-a', uuid: 'uuid-a' }
+        });
+        const directUpload = vi.fn().mockResolvedValue({ ok: true });
+        const finalize = vi.fn().mockResolvedValue({ ok: true });
+        const cameraMetadata = {
+            camera: 'OM-3',
+            lens: 'OLYMPUS M.17mm F1.8',
+            shutterSpeed: '1/800',
+            aperture: '8.0',
+            focalLength: '17.0 mm',
+            iso: '320'
+        };
+        const file = { name: 'first.jpg', type: 'image/jpeg', size: 10, cameraMetadata };
+
+        await submitUploadSection({
+            section: {
+                mode: 'attach',
+                matchedRecipe: { id: 1, slug: 'recipe-a', uuid: 'uuid-a' },
+                form: { author: 'Ian', name: 'Recipe A', notes: '', sourceUrl: '' },
+                recipeSettings: { yellow: 1 },
+                files: [file]
+            },
+            prepare,
+            directUpload,
+            finalize
+        });
+
+        expect(prepare).toHaveBeenCalledWith(
+            expect.objectContaining({ cameraMetadata })
+        );
+    });
+
+    it('passes cameraMetadata as null when the file has none', async () => {
+        const prepare = vi.fn().mockResolvedValue({
+            ok: true,
+            shouldCreateRecipe: false,
+            imageId: 10,
+            parUrl: 'https://upload/1',
+            matchedRecipe: { id: 1, slug: 'recipe-a', uuid: 'uuid-a' }
+        });
+        const directUpload = vi.fn().mockResolvedValue({ ok: true });
+        const finalize = vi.fn().mockResolvedValue({ ok: true });
+        const file = { name: 'first.jpg', type: 'image/jpeg', size: 10 };
+
+        await submitUploadSection({
+            section: {
+                mode: 'attach',
+                matchedRecipe: { id: 1, slug: 'recipe-a', uuid: 'uuid-a' },
+                form: { author: 'Ian', name: 'Recipe A', notes: '', sourceUrl: '' },
+                recipeSettings: { yellow: 1 },
+                files: [file]
+            },
+            prepare,
+            directUpload,
+            finalize
+        });
+
+        expect(prepare).toHaveBeenCalledWith(
+            expect.objectContaining({ cameraMetadata: null })
+        );
+    });
 });

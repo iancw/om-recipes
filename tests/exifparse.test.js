@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { parseRecipeSettingsFromExif } from '../lib/exifparse.js';
+import { parseRecipeSettingsFromExif, parseCameraMetadataFromExif } from '../lib/exifparse.js';
 
 // Minimal valid exif string — just enough context for each test to be self-contained.
 // Fields use the spacing exiftool actually produces.
@@ -436,5 +436,52 @@ Software                        : Version 1.1
             expect(result.source).toBe('OM-3/Version 1.1');
             expect(result.isOmWorkspace).toBe(false);
         });
+    });
+});
+
+describe('parseCameraMetadataFromExif', () => {
+    it('parses camera, lens, and exposure fields from full fixture EXIF', () => {
+        const result = parseCameraMetadataFromExif(loadExifFixture('P4070386.JPG.txt'));
+        expect(result.camera).toBe('OM-3');
+        expect(result.lens).toBe('OLYMPUS M.17mm F1.8');
+        expect(result.shutterSpeed).toBe('1/800');
+        expect(result.aperture).toBe('8.0');
+        expect(result.focalLength).toBe('17.0 mm');
+        expect(result.iso).toBe('320');
+    });
+
+    it('leaves fields null when their tags are absent, independent of other present fields', () => {
+        const exif = `
+Camera Model Name               : OM-1 Mark II
+ISO                              : 200
+`;
+        const result = parseCameraMetadataFromExif(exif);
+        expect(result.camera).toBe('OM-1 Mark II');
+        expect(result.iso).toBe('200');
+        expect(result.lens).toBeNull();
+        expect(result.shutterSpeed).toBeNull();
+        expect(result.aperture).toBeNull();
+        expect(result.focalLength).toBeNull();
+    });
+
+    it('returns all nulls when no relevant tags are present', () => {
+        const result = parseCameraMetadataFromExif(BASE_EXIF);
+        expect(result).toEqual({
+            camera: null,
+            lens: null,
+            shutterSpeed: null,
+            aperture: null,
+            focalLength: null,
+            iso: null
+        });
+    });
+
+    it('treats a "(none)" lens model sentinel as absent rather than a literal string', () => {
+        const exif = `
+Camera Model Name               : OM-1 Mark II
+Lens Model                      : (none)
+`;
+        const result = parseCameraMetadataFromExif(exif);
+        expect(result.lens).toBeNull();
     });
 });

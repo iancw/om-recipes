@@ -75,6 +75,31 @@ describe('RecipeCard', () => {
         expect(markup).toContain('alt="Recipe Sample Image"');
     });
 
+    it('shows exposure metadata under the single preview image', () => {
+        const markup = renderToStaticMarkup(
+            React.createElement(RecipeCard, {
+                recipe: {
+                    id: 42,
+                    recipeName: 'Portra 400',
+                    authorName: 'Photographer',
+                    sampleImages: [
+                        {
+                            id: 'sample-1',
+                            isPrimary: true,
+                            smallUrl: '/assets/images/320/a.jpg',
+                            camera: 'OM-3',
+                            shutterSpeed: '1/500',
+                            aperture: '2.8',
+                            iso: '400'
+                        }
+                    ]
+                }
+            })
+        );
+
+        expect(markup).toContain('OM-3 • 1/500s • f/2.8 • ISO 400');
+    });
+
     it('does not render extra sample thumbnails when showSampleStrip is false', () => {
         const markup = renderToStaticMarkup(
             React.createElement(RecipeCard, {

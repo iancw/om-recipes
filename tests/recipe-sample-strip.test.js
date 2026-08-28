@@ -79,6 +79,38 @@ describe('RecipeSampleStrip', () => {
         expect(markup).toContain('Comparison: Watch Hill');
     });
 
+    it('shows the active image exposure metadata below the main image', () => {
+        const markup = renderToStaticMarkup(
+            React.createElement(RecipeSampleStrip, {
+                images: [
+                    sampleImage('a', {
+                        camera: 'OM-3',
+                        lens: '25mm F1.8',
+                        shutterSpeed: '1/250',
+                        aperture: '4.0',
+                        focalLength: '40.0 mm',
+                        iso: '200'
+                    }),
+                    sampleImage('b')
+                ],
+                recipeHref: '/recipes/example'
+            })
+        );
+
+        expect(markup).toContain('OM-3 • 25mm F1.8 • 1/250s • f/4.0 • 40.0 mm • ISO 200');
+    });
+
+    it('omits the exposure metadata line when the active image has no EXIF', () => {
+        const markup = renderToStaticMarkup(
+            React.createElement(RecipeSampleStrip, {
+                images: [sampleImage('a'), sampleImage('b')],
+                recipeHref: '/recipes/example'
+            })
+        );
+
+        expect(markup).not.toContain('recipe-sample-exif');
+    });
+
     it('returns nothing when there is no resolvable main image', () => {
         const markup = renderToStaticMarkup(
             React.createElement(RecipeSampleStrip, {

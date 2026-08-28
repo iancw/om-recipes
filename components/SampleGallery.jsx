@@ -6,6 +6,7 @@ import DeleteConfirmationModal from './DeleteConfirmationModal.jsx';
 import RecipePreviewImage from './RecipePreviewImage.jsx';
 import {
   formatComparisonImageLabelForDisplay,
+  formatImageMetadataLine,
   getImagePreviewUrl,
   getRecipeModalImageUrl
 } from '../lib/recipe-image-selection';
@@ -392,9 +393,9 @@ export default function SampleGallery({
                   {[recipeName, formatComparisonImageLabelForDisplay(activeImage.label)].filter(Boolean).join(' — ')}
                 </p>
               )}
-              {(activeImage.camera || activeImage.lens) && (
+              {formatImageMetadataLine(activeImage) && (
                 <p>
-                  {[activeImage.camera, activeImage.lens].filter(Boolean).join(' • ')}
+                  {formatImageMetadataLine(activeImage)}
                 </p>
               )}
             </div>

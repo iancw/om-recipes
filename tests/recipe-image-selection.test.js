@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     comparisonImageSelectionValue,
+    formatImageMetadataLine,
     getAvailableComparisonImageLabels,
     getImagePreviewUrl,
     getRecipeCardPreviewUrl,
@@ -285,5 +286,36 @@ describe('recipe image selection helpers', () => {
 
         expect(getImagePreviewUrl(hiddenImage)).toBeNull();
         expect(getRecipeModalImageUrl(hiddenImage)).toBeNull();
+    });
+
+    it('joins all six metadata fields into one line, formatting shutter speed, aperture, and ISO', () => {
+        const line = formatImageMetadataLine({
+            camera: 'OM-3',
+            lens: '12-40mm f/2.8',
+            shutterSpeed: '1/250',
+            aperture: '4.0',
+            focalLength: '40.0 mm',
+            iso: '200'
+        });
+
+        expect(line).toBe('OM-3 • 12-40mm f/2.8 • 1/250s • f/4.0 • 40.0 mm • ISO 200');
+    });
+
+    it('omits missing fields without leaving gaps', () => {
+        const line = formatImageMetadataLine({
+            camera: 'iPhone 15 Pro',
+            lens: null,
+            shutterSpeed: '1/120',
+            aperture: null,
+            focalLength: '6.86 mm',
+            iso: '64'
+        });
+
+        expect(line).toBe('iPhone 15 Pro • 1/120s • 6.86 mm • ISO 64');
+    });
+
+    it('returns an empty string when no metadata fields are present', () => {
+        expect(formatImageMetadataLine({})).toBe('');
+        expect(formatImageMetadataLine(null)).toBe('');
     });
 });

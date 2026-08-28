@@ -73,7 +73,11 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
                     fullSizeUrl: images.fullSizeUrl,
                     dimensions: images.dimensions,
                     camera: images.camera,
-                    lens: images.lens
+                    lens: images.lens,
+                    shutterSpeed: images.shutterSpeed,
+                    aperture: images.aperture,
+                    focalLength: images.focalLength,
+                    iso: images.iso
                 }
             })
             .from(recipeComparisonImages)
@@ -92,6 +96,10 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
                     dimensions: images.dimensions,
                     camera: images.camera,
                     lens: images.lens,
+                    shutterSpeed: images.shutterSpeed,
+                    aperture: images.aperture,
+                    focalLength: images.focalLength,
+                    iso: images.iso,
                     validExif: images.validExif
                 },
                 isPrimary: recipeSampleImages.isPrimary,

@@ -38,41 +38,43 @@ export default async function Page() {
 
     return (
         <div className="w-full space-y-6">
-            <Card className="max-w-xl">
-                <CardHeader>
-                    <CardTitle>Profile</CardTitle>
-                    <CardDescription>
-                        These fields control what’s shown publicly for you as an author profile.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                <ProfileForm
-                    action={updateMyProfileAction}
-                    initialValues={{
-                        name: author?.name ?? user.name ?? '',
-                        instagramLink: author?.instagramLink ?? '',
-                        flickrLink: author?.flickrLink ?? '',
-                        website: author?.website ?? '',
-                        kofiLink: author?.kofiLink ?? ''
-                    }}
-                />
-                </CardContent>
-            </Card>
-
-            <Card className="max-w-xl">
-                <CardHeader>
-                    <CardTitle>Notifications</CardTitle>
-                    <CardDescription>
-                        Choose what you hear about in the bell icon and in your daily email digest.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <NotificationPreferencesForm
-                        action={updateMyNotificationPreferencesAction}
-                        initialValues={notificationPreferences}
+            <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+                <Card className="max-w-xl lg:max-w-none">
+                    <CardHeader>
+                        <CardTitle>Profile</CardTitle>
+                        <CardDescription>
+                            These fields control what’s shown publicly for you as an author profile.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                    <ProfileForm
+                        action={updateMyProfileAction}
+                        initialValues={{
+                            name: author?.name ?? user.name ?? '',
+                            instagramLink: author?.instagramLink ?? '',
+                            flickrLink: author?.flickrLink ?? '',
+                            website: author?.website ?? '',
+                            kofiLink: author?.kofiLink ?? ''
+                        }}
                     />
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+
+                <Card className="max-w-xl lg:max-w-none">
+                    <CardHeader>
+                        <CardTitle>Notifications</CardTitle>
+                        <CardDescription>
+                            Choose what you hear about in the bell icon and in your daily email digest.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <NotificationPreferencesForm
+                            action={updateMyNotificationPreferencesAction}
+                            initialValues={notificationPreferences}
+                        />
+                    </CardContent>
+                </Card>
+            </div>
 
             <Card className="max-w-3xl">
                 <CardHeader>

@@ -1,10 +1,52 @@
 'use client';
 
-import { SubmitButton } from 'components/submit-button';
+import { useRef, useState } from 'react';
+import { useFormStatus } from 'react-dom';
+import { Button } from 'components/ui/button';
+
+const FIELD_NAMES = ['notifyNewRecipe', 'notifySampleImage', 'notifySave', 'notifyComment', 'emailDigestEnabled'];
+
+function getValuesFromFormData(formData) {
+    return FIELD_NAMES.reduce((values, name) => {
+        values[name] = formData.get(name) != null;
+        return values;
+    }, {});
+}
+
+function hasChanges(form, savedValues) {
+    if (!form) return false;
+
+    const values = getValuesFromFormData(new FormData(form));
+    return FIELD_NAMES.some((name) => values[name] !== Boolean(savedValues[name]));
+}
+
+function NotificationSubmitButton({ isDirty }) {
+    const { pending } = useFormStatus();
+
+    return (
+        <Button type="submit" disabled={!isDirty || pending}>
+            {pending ? 'Saving...' : 'Save notification preferences'}
+        </Button>
+    );
+}
 
 export function NotificationPreferencesForm({ action, initialValues }) {
+    const formRef = useRef(null);
+    const [savedValues, setSavedValues] = useState(initialValues);
+    const [isDirty, setIsDirty] = useState(false);
+
+    const handleInput = () => {
+        setIsDirty(hasChanges(formRef.current, savedValues));
+    };
+
+    const handleSubmit = async (formData) => {
+        await action(formData);
+        setSavedValues(getValuesFromFormData(formData));
+        setIsDirty(false);
+    };
+
     return (
-        <form action={action} className="flex flex-col gap-4">
+        <form ref={formRef} action={handleSubmit} className="flex flex-col gap-4" onInput={handleInput}>
             <label className="flex items-center gap-3 text-sm text-foreground">
                 <input
                     type="checkbox"
@@ -51,7 +93,7 @@ export function NotificationPreferencesForm({ action, initialValues }) {
                 Email me a daily digest
             </label>
             <div className="pt-2">
-                <SubmitButton text="Save notification preferences" />
+                <NotificationSubmitButton isDirty={isDirty} />
             </div>
         </form>
     );

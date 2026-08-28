@@ -2,3 +2,11 @@
   publish = ".next"
   command = "npm run build"
   functions = "netlify/functions"
+
+# The default function bundler transpiles this ESM function to CJS, which flips
+# `import ... from '@netlify/functions'` to a require() that resolves to
+# dist/main.cjs — a file the tracer never bundles — so the Lambda fails at init.
+# It also can't handle the transitive `import '../db/index.ts'`. esbuild bundles
+# the whole graph (TypeScript included) into one file and avoids both problems.
+[functions."notification-digest"]
+  node_bundler = "esbuild"

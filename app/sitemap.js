@@ -3,10 +3,11 @@ import { recipes } from '../db/schema.ts';
 import { getRecipePath } from '../lib/recipe-url.js';
 import { unstable_cache } from 'next/cache';
 import { PUBLIC_RECIPE_CATALOG_CACHE_SECONDS, PUBLIC_RECIPE_CATALOG_CACHE_TAG } from '../lib/public-recipe-catalog-constants.js';
+import { GUIDE_PAGES } from '../lib/guide-pages.js';
 
 const BASE_URL = (process.env.APP_BASE_URL ?? '').replace(/\/+$/, '');
 
-const STATIC_PAGES = ['/', '/about', '/how-to'];
+const STATIC_PAGES = ['/', '/about', '/how-to', ...GUIDE_PAGES.map((page) => page.href)];
 
 const getCachedRecipeSitemapRows = unstable_cache(
     async () => db.select({ slug: recipes.slug }).from(recipes),

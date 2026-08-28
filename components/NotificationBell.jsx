@@ -10,6 +10,7 @@ function describeNotification(item) {
     const recipeName = item.recipe?.recipeName ?? 'a recipe';
     const actorName = item.actorAuthorName ?? 'Someone';
 
+    if (item.type === 'comment') return `${actorName} commented on ${recipeName}`;
     if (item.type === 'sample_image_added') return `${actorName} added a sample image to ${recipeName}`;
     if (item.type === 'recipe_saved') return `${actorName} saved ${recipeName}`;
     if (item.type === 'new_recipe') return `New recipe: ${recipeName} by ${actorName}`;

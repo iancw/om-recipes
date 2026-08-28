@@ -47,6 +47,7 @@ describe('updateMyNotificationPreferencesAction', () => {
     it('maps checked boxes to true and unchecked to false', async () => {
         const formData = new FormData();
         formData.set('notifySampleImage', 'on');
+        formData.set('notifyComment', 'on');
         formData.set('emailDigestEnabled', 'on');
         // notifyNewRecipe and notifySave intentionally omitted (unchecked boxes are absent from FormData)
 
@@ -56,6 +57,7 @@ describe('updateMyNotificationPreferencesAction', () => {
             notifyNewRecipe: false,
             notifySampleImage: true,
             notifySave: false,
+            notifyComment: true,
             emailDigestEnabled: true
         });
         expect(revalidatePathMock).toHaveBeenCalledWith('/profile');

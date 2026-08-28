@@ -22,7 +22,7 @@ import {
  */
 
 export const recipeTypeEnum = pgEnum('recipe_type', ['COLOR', 'MONO']);
-export const notificationTypeEnum = pgEnum('notification_type', ['new_recipe', 'recipe_saved', 'sample_image_added']);
+export const notificationTypeEnum = pgEnum('notification_type', ['new_recipe', 'recipe_saved', 'sample_image_added', 'comment']);
 
 export const users = pgTable(
     'users',
@@ -406,6 +406,25 @@ export const savedRecipes = pgTable(
     ]
 );
 
+export const comments = pgTable(
+    'comments',
+    {
+        id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+        uuid: uuid('uuid').defaultRandom().notNull(),
+        recipeId: integer('recipe_id')
+            .notNull()
+            .references(() => recipes.id, { onDelete: 'cascade' }),
+        authorId: integer('author_id').references(() => authors.id, { onDelete: 'set null' }),
+        body: text('body').notNull(),
+        createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
+    },
+    (t) => [
+        uniqueIndex('comments_uuid_unique').on(t.uuid),
+        index('comments_recipe_id_idx').on(t.recipeId),
+        index('comments_author_id_idx').on(t.authorId)
+    ]
+);
+
 // Tracks which recipes a user has loaded into each camera mode dial position and color profile slot.
 // modePosition: one of c1, c2, c3, c4, c5, pasmb (P/A/S/M/B shared position)
 // colorSlot: 1–4 (Color 1 through Color 4)
@@ -465,6 +484,7 @@ export const notificationPreferences = pgTable(
         notifyNewRecipe: boolean('notify_new_recipe').notNull().default(false),
         notifySampleImage: boolean('notify_sample_image').notNull().default(true),
         notifySave: boolean('notify_save').notNull().default(true),
+        notifyComment: boolean('notify_comment').notNull().default(true),
         emailDigestEnabled: boolean('email_digest_enabled').notNull().default(false),
         createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
         updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
@@ -493,7 +513,8 @@ export const authorsRelations = relations(authors, ({ one, many }) => ({
     }),
     recipes: many(recipes),
     images: many(images),
-    sampleImages: many(recipeSampleImages)
+    sampleImages: many(recipeSampleImages),
+    comments: many(comments)
 }));
 
 export const imagesRelations = relations(images, ({ one, many }) => ({
@@ -520,7 +541,8 @@ export const recipesRelations = relations(recipes, ({ one, many }) => ({
     }),
     sampleImages: many(recipeSampleImages),
     comparisonImages: many(recipeComparisonImages),
-    savedByUsers: many(savedRecipes)
+    savedByUsers: many(savedRecipes),
+    comments: many(comments)
 }));
 
 export const recipeColorSettingsRelations = relations(recipeColorSettings, ({ one }) => ({
@@ -571,6 +593,17 @@ export const savedRecipesRelations = relations(savedRecipes, ({ one }) => ({
     recipe: one(recipes, {
         fields: [savedRecipes.recipeId],
         references: [recipes.id]
+    })
+}));
+
+export const commentsRelations = relations(comments, ({ one }) => ({
+    recipe: one(recipes, {
+        fields: [comments.recipeId],
+        references: [recipes.id]
+    }),
+    author: one(authors, {
+        fields: [comments.authorId],
+        references: [authors.id]
     })
 }));
 

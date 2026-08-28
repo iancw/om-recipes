@@ -68,6 +68,7 @@ export async function updateMyNotificationPreferencesAction(formData) {
         notifyNewRecipe: formData?.has('notifyNewRecipe'),
         notifySampleImage: formData?.has('notifySampleImage'),
         notifySave: formData?.has('notifySave'),
+        notifyComment: formData?.has('notifyComment'),
         emailDigestEnabled: formData?.has('emailDigestEnabled')
     });
 

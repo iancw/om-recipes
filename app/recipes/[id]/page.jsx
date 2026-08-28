@@ -15,15 +15,19 @@ import {
 import { and, asc, eq, ilike, ne, or, sql } from 'drizzle-orm';
 import RecipeCard from '../../../components/recipe-card.jsx';
 import SampleGallery from '../../../components/SampleGallery.jsx';
+import CommentsSection from '../../../components/CommentsSection.jsx';
 import { Badge } from '../../../components/ui/badge.jsx';
 import { Card, CardContent } from '../../../components/ui/card.jsx';
 import {
+    addCommentAction,
+    deleteCommentAction,
     deleteMyRecipeAction,
     deleteRecipeSampleImageAction,
     setPrimaryRecipeSampleImageAction,
     updateRecipeAction
 } from './actions';
 import { getSavedRecipeIdsForUser, getSaveCountForRecipe } from '../../../lib/recipe-saves.js';
+import { getCommentsForRecipe } from '../../../lib/comments.js';
 import { getRecipeSelectFields, normalizeRecipeRow } from '../../../lib/recipe-data.js';
 import { hydrateRecipeImageRecord } from '../../../lib/recipe-image-assets.js';
 import { getRecipePath, isUuidLike } from '../../../lib/recipe-url.js';
@@ -237,6 +241,7 @@ export default async function Page({ params }) {
     const authedAuthorIds = await getAuthedAuthorIds(userId);
     const isOwner = authedAuthorIds.includes(recipe.authorId);
     const saveCount = isOwner ? await getSaveCountForRecipe(recipe.id) : null;
+    const recipeComments = await getCommentsForRecipe(recipe.id);
 
     return (
         <div className="flex w-full flex-col gap-8 pb-10 pt-2">
@@ -263,6 +268,17 @@ export default async function Page({ params }) {
                 />
                 <SampleGallery images={recipe.comparisonImages} title="Comparison images" recipeName={recipe.recipeName} />
             </div>
+
+            <CommentsSection
+                recipeId={recipe.id}
+                recipePath={getRecipePath(recipe)}
+                comments={recipeComments}
+                isLoggedIn={Boolean(userId)}
+                viewerAuthorIds={authedAuthorIds}
+                recipeAuthorId={recipe.authorId}
+                addCommentAction={addCommentAction}
+                deleteCommentAction={deleteCommentAction}
+            />
 
             {relatedWhiteBalanceRecipes.length > 0 ? (
                 <Card className="overflow-hidden border-border/60 bg-card/80">

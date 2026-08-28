@@ -60,6 +60,10 @@ vi.mock('../lib/oci/objectStorage.js', () => ({
     getObjectStorageNamespaceFromEnv: (...args) => getObjectStorageNamespaceFromEnvMock(...args)
 }));
 
+vi.mock('../lib/comments.js', () => ({
+    getCommentsPostedByAuthors: vi.fn(async () => [])
+}));
+
 describe('privacy workflows', () => {
     beforeEach(() => {
         vi.resetModules();

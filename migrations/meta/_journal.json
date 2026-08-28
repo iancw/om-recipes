@@ -169,6 +169,13 @@
       "when": 1787770819438,
       "tag": "0023_fair_robin_chapel",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787798897834,
+      "tag": "0024_eminent_owl",
+      "breakpoints": true
     }
   ]
 }

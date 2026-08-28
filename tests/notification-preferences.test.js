@@ -42,6 +42,7 @@ describe('notification preferences', () => {
             notifyNewRecipe: true,
             notifySampleImage: false,
             notifySave: true,
+            notifyComment: false,
             emailDigestEnabled: false
         };
         selectMock = vi.fn(() => ({
@@ -63,6 +64,7 @@ describe('notification preferences', () => {
             notifyNewRecipe: true,
             notifySampleImage: false,
             notifySave: false,
+            notifyComment: true,
             emailDigestEnabled: true
         });
 
@@ -72,6 +74,7 @@ describe('notification preferences', () => {
                 notifyNewRecipe: true,
                 notifySampleImage: false,
                 notifySave: false,
+                notifyComment: true,
                 emailDigestEnabled: true
             })
         );

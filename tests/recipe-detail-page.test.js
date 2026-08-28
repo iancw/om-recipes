@@ -30,6 +30,10 @@ vi.mock('../lib/recipe-saves.js', () => ({
     getSavedRecipeIdsForUser: (...args) => getSavedRecipeIdsForUserMock(...args)
 }));
 
+vi.mock('../lib/comments.js', () => ({
+    getCommentsForRecipe: vi.fn(async () => [])
+}));
+
 vi.mock('../lib/whiteBalanceEquivalence.js', () => ({
     getEquivalentWhiteBalance: vi.fn(() => null)
 }));
@@ -50,6 +54,10 @@ vi.mock('../components/SampleGallery.jsx', () => ({
     default: () => null
 }));
 
+vi.mock('../components/CommentsSection.jsx', () => ({
+    default: () => null
+}));
+
 vi.mock('../components/ui/badge.jsx', () => ({
     Badge: () => null
 }));
@@ -60,6 +68,8 @@ vi.mock('../components/ui/card.jsx', () => ({
 }));
 
 vi.mock('../app/recipes/[id]/actions.js', () => ({
+    addCommentAction: vi.fn(),
+    deleteCommentAction: vi.fn(),
     deleteMyRecipeAction: vi.fn(),
     deleteRecipeSampleImageAction: vi.fn(),
     setPrimaryRecipeSampleImageAction: vi.fn(),

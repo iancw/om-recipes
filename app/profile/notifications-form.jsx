@@ -35,6 +35,15 @@ export function NotificationPreferencesForm({ action, initialValues }) {
             <label className="flex items-center gap-3 text-sm text-foreground">
                 <input
                     type="checkbox"
+                    name="notifyComment"
+                    defaultChecked={initialValues.notifyComment}
+                    className="h-4 w-4 rounded border-input"
+                />
+                Comments on my recipes
+            </label>
+            <label className="flex items-center gap-3 text-sm text-foreground">
+                <input
+                    type="checkbox"
                     name="emailDigestEnabled"
                     defaultChecked={initialValues.emailDigestEnabled}
                     className="h-4 w-4 rounded border-input"

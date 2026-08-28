@@ -3,6 +3,7 @@
 import { db } from '../../../db/index.ts';
 import {
     authors,
+    comments,
     recipeColorSettings,
     recipeComparisonImages,
     recipeMonoSettings,
@@ -12,9 +13,11 @@ import {
 import { and, eq, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireUser } from '../../../lib/auth.js';
+import { findOrCreateAuthorForUser, requireUser } from '../../../lib/auth.js';
 import { getRecipePath } from '../../../lib/recipe-url.js';
 import { revalidatePublicRecipeCatalog } from '../../../lib/public-recipe-catalog-cache.js';
+import { addComment, deleteComment } from '../../../lib/comments.js';
+import { notifyRecipeCommented } from '../../../lib/notifications.js';
 
 import {
     computeRecipeFingerprint,
@@ -391,4 +394,72 @@ export async function setPrimaryRecipeSampleImageAction({ recipeId, imageId }) {
     const recipe = recipeRows[0];
     revalidatePath(getRecipePath(recipe));
     revalidatePath('/');
+}
+
+export async function addCommentAction({ recipeId, body }) {
+    const session = await requireUser();
+
+    const parsedRecipeId = Number(recipeId);
+    if (!Number.isFinite(parsedRecipeId)) throw new Error('Invalid recipe id');
+
+    const recipeRows = await db
+        .select({ id: recipes.id, uuid: recipes.uuid, slug: recipes.slug })
+        .from(recipes)
+        .where(eq(recipes.id, parsedRecipeId))
+        .limit(1);
+    if (recipeRows.length === 0) throw new Error('Recipe not found');
+    const recipe = recipeRows[0];
+
+    const author = await findOrCreateAuthorForUser({ userId: session.user.id, email: session.user.email });
+
+    let comment;
+    try {
+        comment = await addComment({ recipeId: parsedRecipeId, authorId: author.id, body });
+    } catch (err) {
+        // Expected, user-facing validation failures (blank body, over-length body,
+        // the spam cooldown) are returned as data rather than thrown: Next.js
+        // redacts thrown Server Action error messages in production builds, which
+        // would leave the user staring at framework boilerplate instead of the
+        // reason their comment did not post.
+        return { ok: false, error: err?.message || 'Failed to post comment' };
+    }
+
+    await notifyRecipeCommented(parsedRecipeId, comment.id, author.id);
+
+    revalidatePath(getRecipePath(recipe));
+
+    return { ok: true };
+}
+
+export async function deleteCommentAction({ recipeId, commentId }) {
+    const session = await requireUser();
+
+    const parsedRecipeId = Number(recipeId);
+    const parsedCommentId = Number(commentId);
+    if (!Number.isFinite(parsedRecipeId)) throw new Error('Invalid recipe id');
+    if (!Number.isFinite(parsedCommentId)) throw new Error('Invalid comment id');
+
+    const recipeRows = await db
+        .select({ id: recipes.id, uuid: recipes.uuid, slug: recipes.slug, authorId: recipes.authorId })
+        .from(recipes)
+        .where(eq(recipes.id, parsedRecipeId))
+        .limit(1);
+    if (recipeRows.length === 0) throw new Error('Recipe not found');
+    const recipe = recipeRows[0];
+
+    const commentRows = await db
+        .select({ recipeId: comments.recipeId })
+        .from(comments)
+        .where(eq(comments.id, parsedCommentId))
+        .limit(1);
+    if (commentRows.length === 0 || commentRows[0].recipeId !== parsedRecipeId) {
+        throw new Error('Comment not found');
+    }
+
+    const authorRows = await db.select({ id: authors.id }).from(authors).where(eq(authors.userId, session.user.id));
+    const requestingAuthorIds = authorRows.map((row) => row.id);
+
+    await deleteComment({ commentId: parsedCommentId, requestingAuthorIds, recipeAuthorId: recipe.authorId });
+
+    revalidatePath(getRecipePath(recipe));
 }

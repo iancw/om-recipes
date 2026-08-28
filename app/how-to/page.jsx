@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription } from 'components/ui/card';
 import { Badge } from 'components/ui/badge';
-import GuideSubNav from './_components/GuideSubNav';
 import { GUIDE_PAGES } from 'lib/guide-pages.js';
 
 export const metadata = {
@@ -21,8 +20,6 @@ export default function GuidesHubPage() {
                     settings behind a recipe actually do.
                 </p>
             </div>
-
-            <GuideSubNav current="hub" />
 
             <div className="grid gap-4 sm:grid-cols-2">
                 {GUIDE_PAGES.map((page) => (

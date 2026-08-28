@@ -2,8 +2,55 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { cn } from 'lib/cn';
 import { buttonVariants } from 'components/ui/button';
+
+function MobileNavGroup({ item, onNavigate }) {
+    const pathname = usePathname();
+    const containsCurrent = item.children.some(
+        (child) => pathname === child.href || pathname.startsWith(`${child.href}/`)
+    );
+    const [expanded, setExpanded] = useState(containsCurrent);
+
+    return (
+        <li>
+            <button
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((v) => !v)}
+                className="flex w-full items-center justify-between rounded-full px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+                {item.linkText}
+                <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    aria-hidden="true"
+                    className={cn('transition-transform', expanded && 'rotate-180')}
+                >
+                    <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </button>
+            {expanded && (
+                <ul className="flex flex-col border-l border-border/70 pl-3 ml-3">
+                    {item.children.map((child) => (
+                        <li key={child.href}>
+                            <Link
+                                href={child.href}
+                                onClick={onNavigate}
+                                className="block rounded-full px-3 py-2 text-sm text-muted-foreground no-underline transition-colors hover:bg-accent hover:text-foreground"
+                            >
+                                {child.linkText}
+                            </Link>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </li>
+    );
+}
 
 export default function MobileMenu({ navItems, isLoggedIn }) {
     const [open, setOpen] = useState(false);
@@ -40,17 +87,21 @@ export default function MobileMenu({ navItems, isLoggedIn }) {
             {open && (
                 <div style={{ flexBasis: '100%' }} className="pb-3 pt-1">
                     <ul className="flex flex-col">
-                        {navItems.map((item) => (
-                            <li key={item.href}>
-                                <Link
-                                    href={item.href}
-                                    onClick={close}
-                                    className="block rounded-full px-3 py-2 text-sm text-muted-foreground no-underline transition-colors hover:bg-accent hover:text-foreground"
-                                >
-                                    {item.linkText}
-                                </Link>
-                            </li>
-                        ))}
+                        {navItems.map((item) =>
+                            item.children ? (
+                                <MobileNavGroup key={item.linkText} item={item} onNavigate={close} />
+                            ) : (
+                                <li key={item.href}>
+                                    <Link
+                                        href={item.href}
+                                        onClick={close}
+                                        className="block rounded-full px-3 py-2 text-sm text-muted-foreground no-underline transition-colors hover:bg-accent hover:text-foreground"
+                                    >
+                                        {item.linkText}
+                                    </Link>
+                                </li>
+                            )
+                        )}
                     </ul>
                     <div className="mt-1 px-1">
                         {isLoggedIn ? (

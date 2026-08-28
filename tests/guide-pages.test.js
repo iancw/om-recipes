@@ -18,9 +18,17 @@ describe('GUIDE_PAGES', () => {
         }
     });
 
-    it('gives every guide a non-empty nav label and short description', () => {
+    it('uses the site-wide guide labels', () => {
+        expect(GUIDE_PAGES.map((page) => page.label)).toEqual([
+            'OM Workspace processing',
+            'JPG → Camera via Computer',
+            'Manually into camera',
+            'What are OM color profiles'
+        ]);
+    });
+
+    it('gives every guide a non-empty short description', () => {
         for (const page of GUIDE_PAGES) {
-            expect(page.label.length).toBeGreaterThan(0);
             expect(page.description.length).toBeGreaterThan(0);
         }
     });

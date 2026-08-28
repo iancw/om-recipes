@@ -5,6 +5,7 @@ import Link from 'next/link';
 import LogoutButton from 'components/LogoutButton';
 import LoginButton from 'components/LoginButton';
 import MobileMenu from 'components/MobileMenu';
+import NavDropdown from 'components/NavDropdown';
 import NotificationBell from 'components/NotificationBell';
 import { cn } from 'lib/cn';
 import { authedNavItems, publicNavItems } from 'lib/navigation.js';
@@ -61,18 +62,22 @@ export default function HeaderNav() {
     return (
         <>
             <div className="nav-desktop items-center gap-4">
-                <ul className="flex flex-wrap gap-2">
+                <ul className="flex flex-wrap items-center gap-2">
                     {visibleNavItems.map((item) => (
-                        <li key={item.href}>
-                            <Link
-                                href={item.href}
-                                className={cn(
-                                    'inline-flex items-center rounded-full px-3 py-2 text-sm no-underline transition-colors',
-                                    'text-muted-foreground hover:bg-accent hover:text-foreground'
-                                )}
-                            >
-                                {item.linkText}
-                            </Link>
+                        <li key={item.href ?? item.linkText}>
+                            {item.children ? (
+                                <NavDropdown label={item.linkText} items={item.children} />
+                            ) : (
+                                <Link
+                                    href={item.href}
+                                    className={cn(
+                                        'inline-flex items-center rounded-full px-3 py-2 text-sm no-underline transition-colors',
+                                        'text-muted-foreground hover:bg-accent hover:text-foreground'
+                                    )}
+                                >
+                                    {item.linkText}
+                                </Link>
+                            )}
                         </li>
                     ))}
                 </ul>

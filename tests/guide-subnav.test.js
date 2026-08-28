@@ -15,12 +15,20 @@ vi.mock('next/link', () => ({
 }));
 
 describe('GuideSubNav', () => {
-    it('links to the hub and every guide page', () => {
+    it('links to every guide page and not to the hub', () => {
         const markup = renderToStaticMarkup(React.createElement(GuideSubNav, {}));
 
-        expect(markup).toContain('href="/how-to"');
         for (const page of GUIDE_PAGES) {
             expect(markup).toContain(`href="${page.href}"`);
+        }
+        expect(markup).not.toContain('href="/how-to"');
+    });
+
+    it('shows the shared guide labels', () => {
+        const markup = renderToStaticMarkup(React.createElement(GuideSubNav, {}));
+
+        for (const page of GUIDE_PAGES) {
+            expect(markup).toContain(page.label);
         }
     });
 
@@ -31,18 +39,5 @@ describe('GuideSubNav', () => {
 
         expect(markup).toMatch(/href="\/how-to\/om-3-profiles"[^>]*aria-current="page"/);
         expect(markup).not.toMatch(/href="\/how-to\/om-workspace"[^>]*aria-current="page"/);
-    });
-
-    it('marks the "All guides" pill current on the hub and no guide pill', () => {
-        const markup = renderToStaticMarkup(
-            React.createElement(GuideSubNav, { current: 'hub' })
-        );
-
-        expect(markup).toMatch(/href="\/how-to"[^>]*aria-current="page"/);
-        for (const page of GUIDE_PAGES) {
-            expect(markup).not.toMatch(
-                new RegExp(`href="${page.href}"[^>]*aria-current="page"`)
-            );
-        }
     });
 });

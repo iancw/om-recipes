@@ -5,13 +5,12 @@ import { GUIDE_PAGES } from 'lib/guide-pages.js';
 const pillBase =
     'inline-flex items-center rounded-full border px-3 py-1.5 text-sm no-underline transition-colors';
 
-// `current` is a guide slug, or 'hub' / undefined on the how-to landing page.
+// `current` is a guide slug, or undefined. The /how-to hub is intentionally
+// not linked here — it exists only for legacy inbound links.
 export default function GuideSubNav({ current }) {
-    const items = [{ slug: 'hub', href: '/how-to', label: 'All guides' }, ...GUIDE_PAGES];
-
     return (
         <nav aria-label="Guides" className="flex flex-wrap gap-2">
-            {items.map((item) => {
+            {GUIDE_PAGES.map((item) => {
                 const isCurrent = item.slug === current;
                 return (
                     <Link

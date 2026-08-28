@@ -138,4 +138,30 @@ describe('RecipeSettings', () => {
         expect(markup).toContain('data-settings-panel="color"');
         expect(markup).toContain('data-settings-saturation-wheel');
     });
+
+    it('shows the parsed shading effect and exposure compensation for a color recipe', () => {
+        const markup = renderToStaticMarkup(
+            React.createElement(RecipeSettings, {
+                recipe: {
+                    type: 'COLOR',
+                    shadingEffect: -3,
+                    exposureCompensation: -3
+                }
+            })
+        );
+
+        expect(markup).toContain('Shading Effect: -3');
+        expect(markup).toContain('Exposure Comp: -0.3');
+    });
+
+    it('falls back to 0 when shading effect and exposure compensation are absent', () => {
+        const markup = renderToStaticMarkup(
+            React.createElement(RecipeSettings, {
+                recipe: { type: 'COLOR' }
+            })
+        );
+
+        expect(markup).toContain('Shading Effect: 0');
+        expect(markup).toContain('Exposure Comp: 0');
+    });
 });

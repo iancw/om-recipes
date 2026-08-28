@@ -337,6 +337,63 @@ Tone Level                      : Highlights; 3; Shadows; -3; Midtones; 1
         });
     });
 
+    describe('shading effect', () => {
+        it('parses a positive shading effect for a color recipe', () => {
+            const exif = makeExif(`
+Picture Mode                    : Color Profile 1; 2
+Monochrome Vignetting           : 3
+`);
+            const result = parseRecipeSettingsFromExif(exif);
+            expect(result.recipeType).toBe('COLOR');
+            expect(result.shadingEffect).toBe(3);
+        });
+
+        it('parses a negative shading effect for a color recipe', () => {
+            const exif = makeExif(`
+Picture Mode                    : Color Profile 1; 2
+Monochrome Vignetting           : -5
+`);
+            const result = parseRecipeSettingsFromExif(exif);
+            expect(result.shadingEffect).toBe(-5);
+        });
+
+        it('parses the shading effect for a monochrome recipe', () => {
+            const exif = makeExif(`
+Picture Mode                    : Monochrome Profile 2; 2
+Monochrome Profile Settings     : Red Filter; 0; 8; Strength 3; 0; 3
+Monochrome Vignetting           : 2
+`);
+            const result = parseRecipeSettingsFromExif(exif);
+            expect(result.recipeType).toBe('MONO');
+            expect(result.shadingEffect).toBe(2);
+        });
+
+        it('leaves shading effect null when the tag is absent', () => {
+            const result = parseRecipeSettingsFromExif(makeExif(`Picture Mode                    : Color Profile 1; 2`));
+            expect(result.shadingEffect).toBeNull();
+        });
+    });
+
+    describe('exposure compensation', () => {
+        it('parses fractional-stop exposure compensation into tenths', () => {
+            const result = parseRecipeSettingsFromExif(makeExif(`Exposure Compensation           : -0.3`));
+            expect(result.exposureCompensation).toBe(-3);
+        });
+
+        it('parses a positive whole-stop exposure compensation into tenths', () => {
+            const result = parseRecipeSettingsFromExif(makeExif(`Exposure Compensation           : +1.0`));
+            expect(result.exposureCompensation).toBe(10);
+        });
+
+        it('leaves exposure compensation null when the tag is absent', () => {
+            const result = parseRecipeSettingsFromExif(`
+Color Profile Settings          : Min -5; Max 5; Yellow 0
+Tone Level                      : Highlights; 0; Shadows; 0; Midtones; 0
+`);
+            expect(result.exposureCompensation).toBeNull();
+        });
+    });
+
     describe('sharpness and contrast', () => {
         it('parses sharpness and contrast settings', () => {
             const exif = makeExif(`

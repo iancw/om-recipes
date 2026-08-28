@@ -108,10 +108,10 @@ function RecipeSettings({ recipe }) {
           </div>
         )}
         <ImageAdjustSliders
-          vignette={recipe.shadingEffect}
-          sharpness={recipe.sharpness}
-          contrast={recipe.contrast}
-          exposureCompensation={(recipe.exposureCompensation || 0)/10}
+          vignette={Number(recipe.shadingEffect ?? 0)}
+          sharpness={Number(recipe.sharpness ?? 0)}
+          contrast={Number(recipe.contrast ?? 0)}
+          exposureCompensation={Number(recipe.exposureCompensation ?? 0) / 10}
         />
       </div>
     </div>

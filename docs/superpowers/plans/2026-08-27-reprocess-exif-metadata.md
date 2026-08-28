@@ -2134,6 +2134,24 @@ photos carry no matching OM profile — expected, not written), 17 images with n
 readable EXIF (legacy `.png` exports / stripped JPEGs). Verified: legacy recipe
 pages now render the sample EXIF line.
 
+- **Scope expanded again to `prepared_object_key IS NULL` legacy rows.** The
+  ~34 images left out above still showed a blank EXIF line — several are recipe
+  *primary* samples (Q116, City Look, Kodachrome 64, carte postal, Warm and
+  Bright), so the card/modal caption, which always reflects the primary sample,
+  rendered nothing. Their originals *are* in the bucket; the key is just
+  embedded in a `/assets/images/<rendition>/…` `full_size_url` / `small_url`
+  instead of a stored `prepared_object_key`. New `resolveImageObjectKey()`
+  (`lib/exif-reprocess.js`) returns `preparedObjectKey` when set, else the key
+  parsed from those URLs via the existing `getRecipeImageObjectKey()`.
+  `selectImages` now also admits rows matching `full_size_url` / `small_url`
+  `LIKE '/assets/images/%'` (a superset — rows whose key still cannot be
+  derived are dropped after the query), projects both URL columns, and
+  `fetchExifText` downloads by the resolved key. `isUsableSampleImage` gates on
+  `resolveImageObjectKey(...)` instead of `preparedObjectKey` directly, so
+  these images also become recipe shading/exposure sources. Dry run for Q116:
+  5 legacy samples (976–980) fetched and parsed cleanly (PEN-F / M.17mm F1.8),
+  0 failures.
+
 ---
 
 ## Self-Review

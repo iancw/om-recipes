@@ -191,20 +191,23 @@ describe('selectImages / selectSampleImageRows query shape', () => {
             id: col('id'), uuid: col('uuid'), preparedObjectKey: col('prepared_object_key'),
             camera: col('camera'), lens: col('lens'), shutterSpeed: col('shutter_speed'),
             aperture: col('aperture'), focalLength: col('focal_length'), iso: col('iso'),
-            createdAt: col('created_at'), finalizedAt: col('finalized_at'), smallUrl: col('small_url')
+            createdAt: col('created_at'), finalizedAt: col('finalized_at'),
+            fullSizeUrl: col('full_size_url'), smallUrl: col('small_url')
         },
         recipeSampleImages: {
             recipeId: col('recipe_id'), imageId: col('image_id'), isPrimary: col('is_primary')
         }
     };
 
-    it('selectImages filters on preparedObjectKey AND (finalizedAt OR smallUrl)', async () => {
+    it('selectImages keeps rows with a preparedObjectKey and dedupes repeated ids', async () => {
         const { database, rec } = queryRecorder([
-            { id: 1 }, { id: 1 }, { id: 2 }
+            { id: 1, preparedObjectKey: 'k/1.jpg' },
+            { id: 1, preparedObjectKey: 'k/1.jpg' },
+            { id: 2, preparedObjectKey: 'k/2.jpg' }
         ]);
         const rows = await selectImages(database, querySchema, {});
         // innerJoin dedup still collapses repeated ids
-        expect(rows).toEqual([{ id: 1 }, { id: 2 }]);
+        expect(rows.map((r) => r.id)).toEqual([1, 2]);
         const where = JSON.stringify(rec.where);
         expect(where).toContain('prepared_object_key');
         expect(where).toContain('finalized_at');
@@ -212,10 +215,36 @@ describe('selectImages / selectSampleImageRows query shape', () => {
         expect(where).toContain(' or ');
     });
 
-    it('selectSampleImageRows projects smallUrl alongside finalizedAt', async () => {
+    it('selectImages admits a legacy row whose key is derivable from full_size_url', async () => {
+        const { database, rec } = queryRecorder([
+            { id: 7, preparedObjectKey: null, fullSizeUrl: '/assets/images/original/authors/a/recipes/r/7.jpg', smallUrl: '/assets/images/600/authors/a/recipes/r/7.jpg' }
+        ]);
+        const rows = await selectImages(database, querySchema, {});
+        expect(rows.map((r) => r.id)).toEqual([7]);
+        const where = JSON.stringify(rec.where);
+        expect(where).toContain('full_size_url');
+    });
+
+    it('selectImages drops a row with neither a prepared key nor a legacy asset URL', async () => {
+        const { database } = queryRecorder([
+            { id: 9, preparedObjectKey: null, fullSizeUrl: 'https://cdn.example/9.jpg', smallUrl: null }
+        ]);
+        const rows = await selectImages(database, querySchema, {});
+        expect(rows).toEqual([]);
+    });
+
+    it('selectImages projects full_size_url so the legacy key can be derived downstream', async () => {
+        const { database, rec } = queryRecorder([]);
+        await selectImages(database, querySchema, {});
+        expect(rec.proj).toHaveProperty('fullSizeUrl', querySchema.images.fullSizeUrl);
+        expect(rec.proj).toHaveProperty('smallUrl', querySchema.images.smallUrl);
+    });
+
+    it('selectSampleImageRows projects fullSizeUrl and smallUrl alongside finalizedAt', async () => {
         const { database, rec } = queryRecorder([]);
         await selectSampleImageRows(database, querySchema, {});
         expect(rec.proj).toHaveProperty('smallUrl', querySchema.images.smallUrl);
+        expect(rec.proj).toHaveProperty('fullSizeUrl', querySchema.images.fullSizeUrl);
         expect(rec.proj).toHaveProperty('finalizedAt', querySchema.images.finalizedAt);
         expect(rec.proj).toHaveProperty('preparedObjectKey', querySchema.images.preparedObjectKey);
     });
@@ -336,6 +365,27 @@ describe('fetchExifText', () => {
         });
         expect(result).toEqual({ raw: null, source: 'fetch', status: 'download_failed' });
     });
+
+    it('fetches a legacy image by the object key derived from its full_size_url', async () => {
+        const legacy = {
+            id: 2,
+            uuid: 'u2',
+            preparedObjectKey: null,
+            fullSizeUrl: '/assets/images/original/authors/a/recipes/r/u2.jpg'
+        };
+        let seenObjectName;
+        const result = await fetchExifText({
+            image: legacy, paths, progress: new Map(), force: false,
+            deps: deps({
+                getObject: async ({ objectName }) => {
+                    seenObjectName = objectName;
+                    return { value: Buffer.from('JPEGBYTES') };
+                }
+            })
+        });
+        expect(seenObjectName).toBe('authors/a/recipes/r/u2.jpg');
+        expect(result.status).toBe('ok');
+    });
 });
 
 describe('run', () => {
@@ -405,6 +455,45 @@ describe('run', () => {
 
         const onDisk = JSON.parse(await readFileFs(paths.reportFile, 'utf8'));
         expect(onDisk.counts.imagesScanned).toBe(1);
+    });
+
+    it('processes a legacy image that has no preparedObjectKey but a legacy full_size_url', async () => {
+        const { schema: s, database, deps } = fixtures({
+            deps: {
+                selectImages: async () => ([
+                    {
+                        id: 1, uuid: 'i1',
+                        preparedObjectKey: null,
+                        fullSizeUrl: '/assets/images/original/authors/a/recipes/a_r/i1.jpg',
+                        smallUrl: '/assets/images/600/authors/a/recipes/a_r/i1.jpg',
+                        camera: null, lens: null, shutterSpeed: null, aperture: null, focalLength: null, iso: null
+                    }
+                ]),
+                selectSampleImageRows: async () => ([
+                    {
+                        recipeId: 90, imageId: 1, uuid: 'i1', isPrimary: true, createdAt: '2026-01-01T00:00:00Z',
+                        preparedObjectKey: null,
+                        fullSizeUrl: '/assets/images/original/authors/a/recipes/a_r/i1.jpg',
+                        smallUrl: '/assets/images/600/authors/a/recipes/a_r/i1.jpg',
+                        finalizedAt: null
+                    }
+                ])
+            }
+        });
+
+        let seenObjectName;
+        deps.getObject = async ({ objectName }) => {
+            seenObjectName = objectName;
+            return { value: Buffer.from('bytes') };
+        };
+
+        const report = await run({ database, schema: s, paths, args: { ...ARGS }, deps, now: NOW });
+
+        expect(seenObjectName).toBe('authors/a/recipes/a_r/i1.jpg');
+        expect(report.cameraUpdates).toHaveLength(1);
+        expect(report.cameraUpdates[0].after.camera).toBe('OM-3');
+        expect(report.shadingExposureUpdates).toHaveLength(1);
+        expect(report.counts.failures).toBe(0);
     });
 
     it('apply: performs image and recipe writes', async () => {

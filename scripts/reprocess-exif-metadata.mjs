@@ -2,7 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeFile as writeFileFs } from 'node:fs/promises';
 
-import { and, eq, inArray, isNotNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, like, or } from 'drizzle-orm';
 
 import {
     cachePaths,
@@ -14,7 +14,7 @@ import {
 } from '../lib/exif-reprocess-cache.js';
 import { readObjectStorageBodyToBuffer } from '../lib/oci/objectStorage.js';
 import { RECIPE_EXIFTOOL_ARGS } from '../lib/exifparse.js';
-import { buildImagePlan, buildRecipePlan, isUsableSampleImage } from '../lib/exif-reprocess.js';
+import { buildImagePlan, buildRecipePlan, isUsableSampleImage, resolveImageObjectKey } from '../lib/exif-reprocess.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -77,20 +77,28 @@ export async function fetchExifText({ image, paths, progress, force, deps }) {
         return { raw: null, source: 'skipped', status: 'skipped_prior_failure' };
     }
 
+    // `preparedObjectKey` when the row has one; otherwise the key derived from
+    // a legacy `/assets/images/…` URL. run() only seeds images that resolve,
+    // but direct callers may pass a bare row, so resolve here too.
+    const objectKey = image.objectKey ?? resolveImageObjectKey(image);
+    if (!objectKey) {
+        return { raw: null, source: 'fetch', status: 'download_failed' };
+    }
+
     let buffer;
     try {
         const response = await deps.getObject({
             client: deps.storageClient,
             namespaceName: deps.namespaceName,
             bucketName: deps.bucketName,
-            objectName: image.preparedObjectKey
+            objectName: objectKey
         });
         buffer = await deps.readBody(response);
     } catch {
         return { raw: null, source: 'fetch', status: 'download_failed' };
     }
 
-    const basename = image.preparedObjectKey.split('/').pop() || `${image.uuid}.jpg`;
+    const basename = objectKey.split('/').pop() || `${image.uuid}.jpg`;
     const file = new File([buffer], basename, { type: 'image/jpeg' });
     let result;
     try {
@@ -110,13 +118,18 @@ export async function fetchExifText({ image, paths, progress, force, deps }) {
 
 export async function selectImages(database, schema, { imageIds = [], recipeIds = [] } = {}) {
     const { images, recipeSampleImages } = schema;
-    // In scope: a downloadable original (preparedObjectKey) that is either
-    // finalized OR fully migrated to published renditions (smallUrl). The
-    // smallUrl clause pulls in legacy-imported images that never had
-    // finalizedAt stamped. Images with only a legacy full_size_url and no
-    // preparedObjectKey stay out — different fetch path.
+    // In scope: a downloadable original that is either finalized OR fully
+    // migrated to published renditions (smallUrl). The original is reachable
+    // via preparedObjectKey, or — for legacy-imported rows that were never
+    // stamped one — via the key embedded in a `/assets/images/…` URL. The
+    // LIKE clause is a superset of what resolveImageObjectKey accepts, so
+    // rows whose key still cannot be derived are dropped after the query.
     const conditions = [
-        isNotNull(images.preparedObjectKey),
+        or(
+            isNotNull(images.preparedObjectKey),
+            like(images.fullSizeUrl, '/assets/images/%'),
+            like(images.smallUrl, '/assets/images/%')
+        ),
         or(isNotNull(images.finalizedAt), isNotNull(images.smallUrl))
     ];
     if (imageIds.length > 0) conditions.push(inArray(images.id, imageIds));
@@ -126,6 +139,8 @@ export async function selectImages(database, schema, { imageIds = [], recipeIds 
             id: images.id,
             uuid: images.uuid,
             preparedObjectKey: images.preparedObjectKey,
+            fullSizeUrl: images.fullSizeUrl,
+            smallUrl: images.smallUrl,
             camera: images.camera,
             lens: images.lens,
             shutterSpeed: images.shutterSpeed,
@@ -145,7 +160,7 @@ export async function selectImages(database, schema, { imageIds = [], recipeIds 
     // innerJoin can duplicate an image shared by several targeted recipes.
     const byId = new Map();
     for (const row of rows) byId.set(row.id, row);
-    return [...byId.values()];
+    return [...byId.values()].filter((row) => resolveImageObjectKey(row));
 }
 
 export async function selectRecipeRows(database, schema, { recipeIds = [] } = {}) {
@@ -193,6 +208,7 @@ export async function selectSampleImageRows(database, schema, { recipeIds = [] }
             createdAt: images.createdAt,
             preparedObjectKey: images.preparedObjectKey,
             finalizedAt: images.finalizedAt,
+            fullSizeUrl: images.fullSizeUrl,
             smallUrl: images.smallUrl
         })
         .from(recipeSampleImages)
@@ -289,6 +305,7 @@ function groupSampleImages(rows) {
             createdAt: row.createdAt,
             preparedObjectKey: row.preparedObjectKey,
             finalizedAt: row.finalizedAt,
+            fullSizeUrl: row.fullSizeUrl,
             smallUrl: row.smallUrl
         });
     }
@@ -341,7 +358,9 @@ export async function run({ database, schema, paths, args, deps, now = () => new
                 needExif.set(sample.imageId, {
                     id: sample.imageId,
                     uuid: sample.uuid,
-                    preparedObjectKey: sample.preparedObjectKey
+                    preparedObjectKey: sample.preparedObjectKey,
+                    fullSizeUrl: sample.fullSizeUrl,
+                    smallUrl: sample.smallUrl
                 });
             }
         }
@@ -360,8 +379,9 @@ export async function run({ database, schema, paths, args, deps, now = () => new
     let wasmRuns = 0;
 
     for (const image of needExif.values()) {
-        if (!image.preparedObjectKey) continue;
-        const outcome = await fetchExifText({ image, paths, progress, force: args.force, deps });
+        const objectKey = image.objectKey ?? resolveImageObjectKey(image);
+        if (!objectKey) continue;
+        const outcome = await fetchExifText({ image: { ...image, objectKey }, paths, progress, force: args.force, deps });
         if (outcome.source === 'cache') cacheHits += 1;
         if (outcome.source === 'fetch' && outcome.status === 'ok') fetched += 1;
 

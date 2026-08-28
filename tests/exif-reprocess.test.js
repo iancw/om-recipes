@@ -125,7 +125,8 @@ import {
     isUsableSampleImage,
     pickSourceImage,
     buildImagePlan,
-    buildRecipePlan
+    buildRecipePlan,
+    resolveImageObjectKey
 } from '../lib/exif-reprocess.js';
 import {
     parseRecipeSettingsFromExif,
@@ -138,6 +139,39 @@ function fixture(name) {
         'utf8'
     );
 }
+
+describe('resolveImageObjectKey', () => {
+    it('returns the preparedObjectKey verbatim when it is set', () => {
+        expect(resolveImageObjectKey({
+            preparedObjectKey: 'authors/a/recipes/r/1.jpg',
+            fullSizeUrl: '/assets/images/original/authors/a/recipes/r/other.jpg'
+        })).toBe('authors/a/recipes/r/1.jpg');
+    });
+
+    it('derives the key from a legacy /assets/images/original full-size URL', () => {
+        expect(resolveImageObjectKey({
+            preparedObjectKey: null,
+            fullSizeUrl: '/assets/images/original/authors/a/recipes/r/1.jpg'
+        })).toBe('authors/a/recipes/r/1.jpg');
+    });
+
+    it('derives the key from a legacy rendition small URL when there is no full-size URL', () => {
+        expect(resolveImageObjectKey({
+            preparedObjectKey: null,
+            fullSizeUrl: null,
+            smallUrl: '/assets/images/600/authors/a/recipes/r/1.jpg'
+        })).toBe('authors/a/recipes/r/1.jpg');
+    });
+
+    it('returns null when there is no prepared key and no legacy asset URL', () => {
+        expect(resolveImageObjectKey({
+            preparedObjectKey: null,
+            fullSizeUrl: null,
+            smallUrl: 'https://cdn.example/authors/a/recipes/r/1-small.jpg'
+        })).toBeNull();
+        expect(resolveImageObjectKey({})).toBeNull();
+    });
+});
 
 describe('isUsableSampleImage', () => {
     const sample = { preparedObjectKey: 'authors/a/recipes/r/1.jpg', finalizedAt: '2026-01-02T00:00:00Z' };
@@ -155,6 +189,16 @@ describe('isUsableSampleImage', () => {
             preparedObjectKey: 'authors/a/recipes/r/1.jpg',
             finalizedAt: null,
             smallUrl: 'https://cdn.example/authors/a/recipes/r/1-small.jpg'
+        };
+        expect(isUsableSampleImage(legacy)).toBe(true);
+    });
+
+    it('admits a legacy image whose object key can only be derived from its asset URLs', () => {
+        const legacy = {
+            preparedObjectKey: null,
+            finalizedAt: null,
+            fullSizeUrl: '/assets/images/original/authors/a/recipes/r/1.jpg',
+            smallUrl: '/assets/images/600/authors/a/recipes/r/1.jpg'
         };
         expect(isUsableSampleImage(legacy)).toBe(true);
     });
@@ -194,6 +238,19 @@ describe('pickSourceImage', () => {
     it('treats a non-finalized image with a smallUrl as a valid source', () => {
         const legacy = valid({ imageId: 9, uuid: 'u9', finalizedAt: null, smallUrl: 'https://cdn/small.jpg' });
         expect(pickSourceImage([legacy])).toEqual({ image: legacy, fallback: true });
+    });
+
+    it('treats a legacy image with only a derivable asset-URL key as a valid source', () => {
+        const legacy = valid({
+            imageId: 12,
+            uuid: 'u12',
+            isPrimary: true,
+            preparedObjectKey: null,
+            finalizedAt: null,
+            fullSizeUrl: '/assets/images/original/authors/a/recipes/r/12.jpg',
+            smallUrl: '/assets/images/600/authors/a/recipes/r/12.jpg'
+        });
+        expect(pickSourceImage([legacy])).toEqual({ image: legacy, fallback: false });
     });
 
     it('prefers the primary image with no fallback flag', () => {

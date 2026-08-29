@@ -67,17 +67,6 @@ export default function CameraFromJpgGuide() {
                     <Step number={6}><p>Click <strong>Load</strong>.</p></Step>
                 </CardContent>
             </Card>
-
-            <p className="text-muted-foreground leading-relaxed">
-                Prefer not to use a computer? You can{' '}
-                <a
-                    href="/how-to/om-3-profiles"
-                    className="text-primary underline-offset-4 hover:underline"
-                >
-                    type a recipe into the OM-3 by hand
-                </a>
-                .
-            </p>
         </GuideLayout>
     );
 }

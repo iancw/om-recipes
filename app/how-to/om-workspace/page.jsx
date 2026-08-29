@@ -23,13 +23,6 @@ export default function OmWorkspaceGuide() {
                     className="text-primary underline-offset-4 hover:underline"
                 >
                     JPG workflow
-                </a>{' '}
-                or{' '}
-                <a
-                    href="/how-to/om-3-profiles"
-                    className="text-primary underline-offset-4 hover:underline"
-                >
-                    manual entry on the OM-3
                 </a>
                 .
             </p>

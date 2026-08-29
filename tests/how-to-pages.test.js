@@ -19,9 +19,7 @@ vi.mock('next/image', () => ({
 
 const GUIDE_MODULES = {
     'om-workspace': () => import('../app/how-to/om-workspace/page.jsx'),
-    'camera-from-jpg': () => import('../app/how-to/camera-from-jpg/page.jsx'),
-    'om-3-profiles': () => import('../app/how-to/om-3-profiles/page.jsx'),
-    'how-profiles-work': () => import('../app/how-to/how-profiles-work/page.jsx')
+    'camera-from-jpg': () => import('../app/how-to/camera-from-jpg/page.jsx')
 };
 
 describe('how-to hub page', () => {

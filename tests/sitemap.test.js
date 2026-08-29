@@ -46,8 +46,6 @@ describe('sitemap', () => {
             { url: 'https://www.omrecipes.dev/how-to' },
             { url: 'https://www.omrecipes.dev/how-to/om-workspace' },
             { url: 'https://www.omrecipes.dev/how-to/camera-from-jpg' },
-            { url: 'https://www.omrecipes.dev/how-to/om-3-profiles' },
-            { url: 'https://www.omrecipes.dev/how-to/how-profiles-work' },
             { url: 'https://www.omrecipes.dev/recipes/portra-400' },
             { url: 'https://www.omrecipes.dev/recipes/kodak-gold' }
         ]);

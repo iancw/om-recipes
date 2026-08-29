@@ -34,10 +34,10 @@ describe('GuideSubNav', () => {
 
     it('marks the current guide with aria-current="page"', () => {
         const markup = renderToStaticMarkup(
-            React.createElement(GuideSubNav, { current: 'om-3-profiles' })
+            React.createElement(GuideSubNav, { current: 'camera-from-jpg' })
         );
 
-        expect(markup).toMatch(/href="\/how-to\/om-3-profiles"[^>]*aria-current="page"/);
+        expect(markup).toMatch(/href="\/how-to\/camera-from-jpg"[^>]*aria-current="page"/);
         expect(markup).not.toMatch(/href="\/how-to\/om-workspace"[^>]*aria-current="page"/);
     });
 });

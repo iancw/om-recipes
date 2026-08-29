@@ -39,9 +39,9 @@ export function ContributeSamplesBannerContent({ onDismiss }) {
     return (
         <Alert className="flex-col items-start sm:flex-row sm:items-center sm:justify-between">
             <div className="max-w-2xl space-y-1">
-                <p className="font-medium text-foreground">Add your photos to the library.</p>
+                <p className="font-medium text-foreground">Add your own sample photos to the library! 📸</p>
                 <p className="text-sm text-muted-foreground">
-                    Adding yours is as easy as dropping a straight-out-of-camera JPG on the upload
+                    Adding more samples or creating a new recipe is as easy as dropping a straight-out-of-camera JPG on the upload
                     page — we read the recipe baked into the file and either attach your shot as a
                     sample to the matching recipe or create a brand-new recipe from it.
                 </p>

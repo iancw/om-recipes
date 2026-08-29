@@ -33,6 +33,8 @@ import { getRecipeSelectFields, normalizeRecipeRow } from '../../../lib/recipe-d
 import { hydrateRecipeImageRecord } from '../../../lib/recipe-image-assets.js';
 import { getRecipePath, isUuidLike } from '../../../lib/recipe-url.js';
 import { getEquivalentWhiteBalance } from '../../../lib/whiteBalanceEquivalence.js';
+import { JsonLd } from '../../../components/JsonLd.jsx';
+import { buildRecipeJsonLd } from '../../../lib/structured-data.js';
 
 const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, userId = null) {
     const v = String(idOrSlug ?? '').trim();
@@ -274,6 +276,7 @@ export default async function Page({ params }) {
 
     return (
         <div className="flex w-full flex-col gap-8 pb-10 pt-2">
+            <JsonLd data={buildRecipeJsonLd({ recipe, baseUrl: process.env.APP_BASE_URL })} />
             <div>
                 <RecipeCard
                     recipe={recipe}

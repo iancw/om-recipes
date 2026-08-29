@@ -7,6 +7,8 @@ import Script from 'next/script';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { ANALYTICS_CONSENT_COOKIE, analyticsConsentGranted, normalizeAnalyticsConsent } from '../lib/privacy-consent.js';
+import { JsonLd } from '../components/JsonLd.jsx';
+import { buildSiteJsonLd } from '../lib/structured-data.js';
 
 export const metadata = {
     title: {
@@ -29,6 +31,8 @@ export default async function RootLayout({ children }) {
         <html lang="en" suppressHydrationWarning>
             <head>
                 <link rel="icon" href="/favicon.svg" sizes="any" />
+
+                <JsonLd data={buildSiteJsonLd({ baseUrl: process.env.APP_BASE_URL })} />
 
                 {shouldLoadAnalytics ? (
                     <>

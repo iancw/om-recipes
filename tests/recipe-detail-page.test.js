@@ -414,6 +414,43 @@ describe('recipe detail page redirects', () => {
         expect(capturedRecipeCardProps.recipe.sampleImages).toHaveLength(1);
     });
 
+    it('emits CreativeWork + ImageObject JSON-LD for the recipe', async () => {
+        const originalBaseUrl = process.env.APP_BASE_URL;
+        process.env.APP_BASE_URL = 'https://www.omrecipes.dev';
+
+        try {
+            const mod = await import('../app/recipes/[id]/page.jsx');
+            const tree = await mod.default({ params: Promise.resolve({ id: 'portra-400' }) });
+
+            const scripts = [];
+            const walk = (node) => {
+                if (!node || typeof node !== 'object') return;
+                if (Array.isArray(node)) return node.forEach(walk);
+                if (node.type === 'script') scripts.push(node);
+                walk(node.props?.children);
+            };
+            walk(tree);
+
+            const ldScript = scripts.find((s) => s.props?.type === 'application/ld+json');
+            expect(ldScript).toBeDefined();
+
+            const data = JSON.parse(
+                ldScript.props.dangerouslySetInnerHTML.__html.replace(/\\u003c/g, '<')
+            );
+            const work = data['@graph'].find((node) => node['@type'] === 'CreativeWork');
+            expect(work.name).toBe('Portra 400');
+            expect(work.url).toBe('https://www.omrecipes.dev/recipes/portra-400');
+
+            const images = data['@graph'].filter((node) => node['@type'] === 'ImageObject');
+            expect(images).toHaveLength(1);
+            expect(images[0].contentUrl).toBe(
+                'https://images.om-recipes.com/authors/a/recipes/r/sample.jpg'
+            );
+        } finally {
+            process.env.APP_BASE_URL = originalBaseUrl;
+        }
+    });
+
     it('uses the asset host for recipe Open Graph images', async () => {
         const mod = await import('../app/recipes/[id]/page.jsx');
 

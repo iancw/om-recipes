@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    buildRecipeSelectFields,
     normalizeRecipeRow,
     normalizeRecipeTypeFilter,
     RECIPE_TYPE_FILTER_VALUES
 } from '../lib/recipe-data.js';
+
+describe('buildRecipeSelectFields', () => {
+    it('selects both createdAt and updatedAt timestamps', () => {
+        const fields = buildRecipeSelectFields();
+        expect(fields).toHaveProperty('createdAt');
+        expect(fields).toHaveProperty('updatedAt');
+    });
+});
 
 describe('recipe-data normalization', () => {
     it('normalizes recipe type filters and defaults to ALL', () => {

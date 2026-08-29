@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import RecipeSimpleCard from "../components/recipe-simple-card.jsx";
+import ContributeSamplesBanner from "../components/ContributeSamplesBanner.jsx";
 import Link from 'next/link';
 import RecipeCard from "../components/recipe-card.jsx";
 import { Badge } from "../components/ui/badge.jsx";
@@ -533,6 +534,7 @@ export default function Page() {
   return (
     <div className="flex w-full flex-col gap-8 pb-10 pt-2">
       <h1 className="sr-only">OM System Recipes</h1>
+      <ContributeSamplesBanner />
       <Card className="overflow-hidden border-border/60 bg-card/80">
         <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
           <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-3">

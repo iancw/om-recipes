@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import RecipeSettings from "./RecipeSettings";
 import { useRouter } from 'next/navigation';
 import AuthorSocialLinks from './AuthorSocialLinks';
@@ -24,6 +24,26 @@ import { Input } from './ui/input.jsx';
 import { Textarea } from './ui/textarea.jsx';
 import { cn } from '../lib/cn.js';
 import { trackGA4Event } from '../lib/ga4-events.js';
+
+// Below this width the sample strip's thumbnail rail plus main image get too
+// cramped inside the recipe modal and the sample image overflows the viewport,
+// so we fall back to the single preview image. Mirrors the matchMedia hook
+// pattern in components/HeaderNav.jsx.
+const NARROW_VIEWPORT_QUERY = '(max-width: 530px)';
+
+function useIsNarrowViewport() {
+  const [isNarrow, setIsNarrow] = useState(false);
+
+  useLayoutEffect(() => {
+    const mql = window.matchMedia(NARROW_VIEWPORT_QUERY);
+    const update = () => setIsNarrow(mql.matches);
+    update();
+    mql.addEventListener('change', update);
+    return () => mql.removeEventListener('change', update);
+  }, []);
+
+  return isNarrow;
+}
 
 function isRedirectError(error) {
   if (!error || typeof error !== 'object') return false;
@@ -92,9 +112,11 @@ export default function RecipeCard({
     () => [...visibleSampleImages, ...visibleComparisonImages],
     [visibleSampleImages, visibleComparisonImages]
   );
+  const isNarrowViewport = useIsNarrowViewport();
   const showSamplesStrip = Boolean(showSampleStrip)
     && selectedImageOption === SAMPLE_IMAGE_SELECTION
-    && gallerySampleImages.length > 1;
+    && gallerySampleImages.length > 1
+    && !isNarrowViewport;
   const recipeHref = getRecipePath(recipe);
 
   const downloadImageHref = getRecipeDownloadUrl(recipe);

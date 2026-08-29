@@ -5,6 +5,9 @@ import { GUIDE_PAGES } from '../lib/guide-pages.js';
 describe('GUIDE_PAGES', () => {
     it('lists the how-to guide pages nested under /how-to', () => {
         expect(GUIDE_PAGES.map((page) => page.href)).toEqual([
+            '/how-to/how-recipes-work',
+            '/how-to/manual-entry',
+            '/how-to/custom-modes',
             '/how-to/om-workspace',
             '/how-to/camera-from-jpg'
         ]);
@@ -18,6 +21,9 @@ describe('GUIDE_PAGES', () => {
 
     it('uses the site-wide guide labels', () => {
         expect(GUIDE_PAGES.map((page) => page.label)).toEqual([
+            'How color recipes work',
+            'Manual recipe entry',
+            'Custom dial modes',
             'OM Workspace processing',
             'JPG → Camera via Computer'
         ]);

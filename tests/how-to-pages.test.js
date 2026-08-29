@@ -18,6 +18,9 @@ vi.mock('next/image', () => ({
 }));
 
 const GUIDE_MODULES = {
+    'how-recipes-work': () => import('../app/how-to/how-recipes-work/page.jsx'),
+    'manual-entry': () => import('../app/how-to/manual-entry/page.jsx'),
+    'custom-modes': () => import('../app/how-to/custom-modes/page.jsx'),
     'om-workspace': () => import('../app/how-to/om-workspace/page.jsx'),
     'camera-from-jpg': () => import('../app/how-to/camera-from-jpg/page.jsx')
 };

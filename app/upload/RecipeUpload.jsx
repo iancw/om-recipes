@@ -8,7 +8,13 @@ import { Alert } from 'components/alert';
 import { Button } from 'components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from 'components/ui/card';
 import { cn } from 'lib/cn';
-import { parseRecipeSettingsFromExif, parseCameraMetadataFromExif, RECIPE_EXIFTOOL_ARGS } from 'lib/exifparse';
+import {
+  parseRecipeSettingsFromExif,
+  parseCameraMetadataFromExif,
+  extractThumbnailDataUrl,
+  RECIPE_EXIFTOOL_ARGS,
+  THUMBNAIL_EXIFTOOL_ARGS
+} from 'lib/exifparse';
 import { computeRecipeFingerprint } from 'lib/recipeFingerprint.js';
 
 import { buildUploadSections } from './group-upload-candidates.js';
@@ -30,6 +36,26 @@ function buildRejectionError(errors) {
     .map((error) => error?.message || 'Unsupported file.')
     .filter(Boolean)
     .join(' ');
+}
+
+// Build the review thumbnail from the JPEG's own embedded EXIF thumbnail
+// rather than decoding the full-resolution original in the browser. Decoding a
+// ~20MP straight-out-of-camera JPG with createImageBitmap/canvas is the single
+// largest allocation in the upload flow and reliably reloads the tab on mobile
+// Safari (which never reports navigator.deviceMemory, so the old low-memory
+// guard never engaged there). The embedded thumbnail comes back as a few KB of
+// base64 text through the same exiftool WASM pass, costing negligible memory.
+// A failure here is non-fatal: the file still uploads, it just has no preview.
+export async function readEmbeddedThumbnailDataUrl(file) {
+  try {
+    const result = await parseMetadata(file, { args: THUMBNAIL_EXIFTOOL_ARGS });
+    if (!result?.success) {
+      return null;
+    }
+    return extractThumbnailDataUrl(result.data);
+  } catch {
+    return null;
+  }
 }
 
 let exifBatchQueue = Promise.resolve();
@@ -66,6 +92,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     }
 
     file.cameraMetadata = parseCameraMetadataFromExif(result.data);
+    file.previewDataUrl = await readEmbeddedThumbnailDataUrl(file);
 
     return parseRecipeSettingsFromExif(result.data);
   };

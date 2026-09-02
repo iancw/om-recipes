@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from 'components/ui/card';
 import { Input } from 'components/ui/input';
 import { Textarea } from 'components/ui/textarea';
 import { getRecipePath } from 'lib/recipe-url.js';
-import { createUploadPreviewUrl, shouldDisableUploadPreview } from 'lib/upload-preview.js';
 
 import DetectedRecipeSettingsCard from './DetectedRecipeSettingsCard';
 import { areSectionPreviewPropsEqual } from './render-boundaries.js';
@@ -19,8 +18,6 @@ export function SectionPreview({
     recipeId,
     fileNames,
     previewUrls,
-    disablePreview,
-    isPreparingPreview,
     removeDisabled,
     onRemoveImageAtIndex
 }) {
@@ -44,20 +41,12 @@ export function SectionPreview({
                             className="flex w-[124px] flex-col gap-2"
                         >
                             <div className="relative flex h-[124px] items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-muted/20">
-                                {disablePreview ? (
-                                    <p className="px-3 text-center text-xs leading-5 text-muted-foreground">
-                                        Preview disabled on this device.
-                                    </p>
-                                ) : previewUrl ? (
+                                {previewUrl ? (
                                     <img
                                         src={previewUrl}
                                         alt={fileName}
                                         className="h-full w-full object-cover"
                                     />
-                                ) : isPreparingPreview ? (
-                                    <p className="px-3 text-center text-xs leading-5 text-muted-foreground">
-                                        Preparing preview...
-                                    </p>
                                 ) : (
                                     <p className="px-3 text-center text-xs leading-5 text-muted-foreground">
                                         Preview unavailable.
@@ -179,22 +168,14 @@ function pluralizeImages(count) {
     return `${count} image${count === 1 ? '' : 's'}`;
 }
 
-function buildPreviewBatchKey(files) {
-    if (!Array.isArray(files) || files.length === 0) {
-        return 'empty';
-    }
-
-    return files
-        .map((file) => `${file?.name || ''}:${file?.size || 0}:${file?.lastModified || 0}`)
-        .join('|');
-}
-
-export function getVisiblePreviewUrls({ previewUrls, resolvedPreviewBatchKey, previewBatchKey }) {
-    if (resolvedPreviewBatchKey !== previewBatchKey) {
-        return [];
-    }
-
-    return Array.isArray(previewUrls) ? previewUrls : [];
+// The preview thumbnail for each grouped file is the JPEG's embedded EXIF
+// thumbnail, extracted once during the EXIF parse in RecipeUpload and stapled
+// onto the File as `previewDataUrl`. Reading it here is synchronous, so the
+// previews never lag behind the pending-file list and no object URLs need to
+// be created or revoked.
+export function getSectionPreviewUrls(files) {
+    if (!Array.isArray(files)) return [];
+    return files.map((file) => file?.previewDataUrl || null);
 }
 
 export function shouldShowSectionForm(submitState, mode = 'create') {
@@ -443,65 +424,14 @@ export default function RecipeUploadSection({ section, files = [] }) {
             ? (section?.matchError || '')
             : 'Recipe settings are missing for this section.'
     ));
-    const [disablePreview, setDisablePreview] = useState(false);
     const [pendingFiles, setPendingFiles] = useState(() => files);
-    const [previewUrls, setPreviewUrls] = useState([]);
-    const [resolvedPreviewBatchKey, setResolvedPreviewBatchKey] = useState(() => (files.length === 0 ? 'empty' : ''));
     const [submitState, setSubmitState] = useState('idle');
     const [submitSummary, setSubmitSummary] = useState('');
     const [submitError, setSubmitError] = useState('');
     const [successRecipe, setSuccessRecipe] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(null);
     const [isDismissed, setIsDismissed] = useState(false);
-    const previewBatchKey = buildPreviewBatchKey(pendingFiles);
-    const visiblePreviewUrls = getVisiblePreviewUrls({
-        previewUrls,
-        resolvedPreviewBatchKey,
-        previewBatchKey
-    });
-
-    useEffect(() => {
-        const frameId = window.requestAnimationFrame(() => {
-            setDisablePreview(shouldDisableUploadPreview(window.navigator?.deviceMemory));
-        });
-
-        return () => {
-            window.cancelAnimationFrame(frameId);
-        };
-    }, []);
-
-    useEffect(() => {
-        let isActive = true;
-        let nextPreviewUrls = [];
-
-        if (!pendingFiles.length || disablePreview) {
-            setPreviewUrls([]);
-            setResolvedPreviewBatchKey(previewBatchKey);
-            return undefined;
-        }
-
-        Promise.all(
-            pendingFiles.map((file) => createUploadPreviewUrl(file).catch(() => null))
-        )
-            .then((urls) => {
-                if (!isActive) {
-                    urls.filter(Boolean).forEach((url) => URL.revokeObjectURL(url));
-                    return;
-                }
-
-                nextPreviewUrls = urls.filter(Boolean);
-                setPreviewUrls(urls);
-            })
-            .finally(() => {
-                if (!isActive) return;
-                setResolvedPreviewBatchKey(previewBatchKey);
-            });
-
-        return () => {
-            isActive = false;
-            nextPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
-        };
-    }, [disablePreview, pendingFiles, previewBatchKey]);
+    const previewUrls = getSectionPreviewUrls(pendingFiles);
 
     useEffect(() => {
         let cancelled = false;
@@ -563,7 +493,6 @@ export default function RecipeUploadSection({ section, files = [] }) {
 
     const fileNames = pendingFiles.map((file) => file?.name || '').filter(Boolean);
     const fileCount = fileNames.length;
-    const isPreparingPreview = !disablePreview && pendingFiles.length > 0 && resolvedPreviewBatchKey !== previewBatchKey;
     const sectionTitle = matchedRecipe?.recipeName || name.trim() || section?.form?.name || 'Detected recipe';
     const omWorkspaceWarning = section?.recipeSettings?.isOmWorkspace
         ? 'Warning: This JPG was produced by OM Workspace. JPGs produced by OM Workspace may not have accurate recipe data in EXIF. Carefully check the detected recipe settings before continuing.'
@@ -588,8 +517,6 @@ export default function RecipeUploadSection({ section, files = [] }) {
         }
 
         setPendingFiles([]);
-        setPreviewUrls([]);
-        setResolvedPreviewBatchKey('empty');
         setSubmitError('');
         setSubmitSummary('');
         setSuccessRecipe(null);
@@ -605,8 +532,6 @@ export default function RecipeUploadSection({ section, files = [] }) {
         setPendingFiles((currentFiles) => {
             const nextFiles = removePendingFileAtIndex(currentFiles, indexToRemove);
             if (nextFiles.length === 0) {
-                setPreviewUrls([]);
-                setResolvedPreviewBatchKey('empty');
                 setSubmitError('');
                 setSubmitSummary('');
                 setSuccessRecipe(null);
@@ -702,9 +627,7 @@ export default function RecipeUploadSection({ section, files = [] }) {
                 <MemoizedSectionPreview
                     recipeId={section?.id || ''}
                     fileNames={fileNames}
-                    previewUrls={visiblePreviewUrls}
-                    disablePreview={disablePreview}
-                    isPreparingPreview={isPreparingPreview}
+                    previewUrls={previewUrls}
                     removeDisabled={removeDisabled}
                     onRemoveImageAtIndex={handleRemoveImageAtIndex}
                 />

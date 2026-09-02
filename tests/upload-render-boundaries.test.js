@@ -12,7 +12,6 @@ import {
     buildMatchCheckFailureState,
     buildBlockingMatchMessage,
     getSectionFieldValidation,
-    getVisiblePreviewUrls,
     resolveSectionMatchState,
     shouldShowSectionForm,
     trimUploadedFilesAfterFailure
@@ -21,8 +20,7 @@ import {
     areDetectedRecipeSettingsPropsEqual,
     areSectionFormPropsEqual,
     areSectionPreviewPropsEqual,
-    buildSectionRenderKey,
-    areUploadPreviewPropsEqual
+    buildSectionRenderKey
 } from '../app/upload/render-boundaries.js';
 
 describe('upload render boundaries', () => {
@@ -46,54 +44,10 @@ describe('upload render boundaries', () => {
         ).toBe(false);
     });
 
-    it('treats title and notes edits as irrelevant to the preview thumbnail subtree', () => {
-        const onRemoveImage = () => {};
-        const props = {
-            fileName: 'recipe.jpg',
-            previewUrl: 'blob:preview',
-            disablePreview: false,
-            isPreparingPreview: false,
-            onRemoveImage
-        };
-
-        expect(
-            areUploadPreviewPropsEqual(props, {
-                ...props,
-                name: 'New Title',
-                notes: 'Fresh notes'
-            })
-        ).toBe(true);
-    });
-
-    it('rerenders the preview thumbnail when the image preview state changes', () => {
-        const onRemoveImage = () => {};
-
-        expect(
-            areUploadPreviewPropsEqual(
-                {
-                    fileName: 'recipe.jpg',
-                    previewUrl: 'blob:preview-a',
-                    disablePreview: false,
-                    isPreparingPreview: false,
-                    onRemoveImage
-                },
-                {
-                    fileName: 'recipe.jpg',
-                    previewUrl: 'blob:preview-b',
-                    disablePreview: false,
-                    isPreparingPreview: false,
-                    onRemoveImage
-                }
-            )
-        ).toBe(false);
-    });
-
     it('ignores section form edits when preview props are unchanged', () => {
         const previewProps = {
             fileNames: ['one.jpg', 'two.jpg'],
-            previewUrls: ['blob:1', 'blob:2'],
-            disablePreview: false,
-            isPreparingPreview: false,
+            previewUrls: ['data:image/jpeg;base64,AAA', 'data:image/jpeg;base64,BBB'],
             recipeId: 'section-fp-1'
         };
 
@@ -362,16 +316,6 @@ describe('upload render boundaries', () => {
                 recipeName: 'Ignored'
             })
         ).toBe('Attached 2 images to "Authoritative Recipe".');
-    });
-
-    it('hides stale preview URLs immediately when a retry trims the pending file batch', () => {
-        expect(
-            getVisiblePreviewUrls({
-                previewUrls: ['blob:first', 'blob:second'],
-                resolvedPreviewBatchKey: 'first.jpg:1:1|second.jpg:2:2',
-                previewBatchKey: 'second.jpg:2:2'
-            })
-        ).toEqual([]);
     });
 
     it('drops create-only browser validation requirements in attach mode', () => {

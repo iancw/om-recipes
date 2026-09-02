@@ -47,18 +47,42 @@ describe('upload render boundaries', () => {
     it('ignores section form edits when preview props are unchanged', () => {
         const previewProps = {
             fileNames: ['one.jpg', 'two.jpg'],
-            previewUrls: ['data:image/jpeg;base64,AAA', 'data:image/jpeg;base64,BBB'],
+            previews: [
+                { url: 'data:image/jpeg;base64,AAA', orientation: 1 },
+                { url: 'data:image/jpeg;base64,BBB', orientation: 8 }
+            ],
             recipeId: 'section-fp-1'
         };
 
         expect(
             areSectionPreviewPropsEqual(previewProps, {
                 ...previewProps,
+                // getSectionPreviews returns a fresh array of fresh objects each
+                // render, so equality must be by value, not identity.
+                previews: [
+                    { url: 'data:image/jpeg;base64,AAA', orientation: 1 },
+                    { url: 'data:image/jpeg;base64,BBB', orientation: 8 }
+                ],
                 author: 'New Author',
                 name: 'New Recipe Name',
                 notes: 'New Notes'
             })
         ).toBe(true);
+    });
+
+    it('rerenders the section preview when a thumbnail orientation changes', () => {
+        const base = {
+            fileNames: ['one.jpg'],
+            previews: [{ url: 'data:image/jpeg;base64,AAA', orientation: 1 }],
+            recipeId: 'section-fp-1'
+        };
+
+        expect(
+            areSectionPreviewPropsEqual(base, {
+                ...base,
+                previews: [{ url: 'data:image/jpeg;base64,AAA', orientation: 6 }]
+            })
+        ).toBe(false);
     });
 
     it('rerenders the section form subtree when section metadata changes', () => {

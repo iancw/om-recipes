@@ -14,10 +14,28 @@ import DetectedRecipeSettingsCard from './DetectedRecipeSettingsCard';
 import { areSectionPreviewPropsEqual } from './render-boundaries.js';
 import { submitUploadSection } from './submit-upload-section.js';
 
+// The extracted EXIF thumbnail is a bare JPEG with no orientation of its own,
+// so a portrait shot arrives on its side. Map the parent file's EXIF
+// Orientation (1-8) to the CSS transform that rights it. Values outside 1-8
+// (and the upright 1) get no transform.
+const EXIF_ORIENTATION_TRANSFORMS = {
+    2: 'scaleX(-1)',
+    3: 'rotate(180deg)',
+    4: 'scaleX(-1) rotate(180deg)',
+    5: 'scaleX(-1) rotate(90deg)',
+    6: 'rotate(90deg)',
+    7: 'scaleX(-1) rotate(270deg)',
+    8: 'rotate(270deg)'
+};
+
+export function cssTransformForExifOrientation(orientation) {
+    return EXIF_ORIENTATION_TRANSFORMS[orientation] || '';
+}
+
 export function SectionPreview({
     recipeId,
     fileNames,
-    previewUrls,
+    previews,
     removeDisabled,
     onRemoveImageAtIndex
 }) {
@@ -33,7 +51,9 @@ export function SectionPreview({
             </div>
             <div className="flex flex-wrap gap-3">
                 {fileNames.map((fileName, index) => {
-                    const previewUrl = previewUrls[index] || null;
+                    const preview = previews[index] || null;
+                    const previewUrl = preview?.url || null;
+                    const previewTransform = cssTransformForExifOrientation(preview?.orientation);
 
                     return (
                         <div
@@ -46,6 +66,7 @@ export function SectionPreview({
                                         src={previewUrl}
                                         alt={fileName}
                                         className="h-full w-full object-cover"
+                                        style={previewTransform ? { transform: previewTransform } : undefined}
                                     />
                                 ) : (
                                     <p className="px-3 text-center text-xs leading-5 text-muted-foreground">
@@ -170,12 +191,16 @@ function pluralizeImages(count) {
 
 // The preview thumbnail for each grouped file is the JPEG's embedded EXIF
 // thumbnail, extracted once during the EXIF parse in RecipeUpload and stapled
-// onto the File as `previewDataUrl`. Reading it here is synchronous, so the
-// previews never lag behind the pending-file list and no object URLs need to
-// be created or revoked.
-export function getSectionPreviewUrls(files) {
+// onto the File as `previewDataUrl` (+ `previewOrientation`, since the bare
+// thumbnail carries no orientation of its own). Reading it here is synchronous,
+// so the previews never lag behind the pending-file list and no object URLs
+// need to be created or revoked.
+export function getSectionPreviews(files) {
     if (!Array.isArray(files)) return [];
-    return files.map((file) => file?.previewDataUrl || null);
+    return files.map((file) => ({
+        url: file?.previewDataUrl || null,
+        orientation: file?.previewOrientation || 1
+    }));
 }
 
 export function shouldShowSectionForm(submitState, mode = 'create') {
@@ -431,7 +456,7 @@ export default function RecipeUploadSection({ section, files = [] }) {
     const [successRecipe, setSuccessRecipe] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(null);
     const [isDismissed, setIsDismissed] = useState(false);
-    const previewUrls = getSectionPreviewUrls(pendingFiles);
+    const previews = getSectionPreviews(pendingFiles);
 
     useEffect(() => {
         let cancelled = false;
@@ -627,7 +652,7 @@ export default function RecipeUploadSection({ section, files = [] }) {
                 <MemoizedSectionPreview
                     recipeId={section?.id || ''}
                     fileNames={fileNames}
-                    previewUrls={previewUrls}
+                    previews={previews}
                     removeDisabled={removeDisabled}
                     onRemoveImageAtIndex={handleRemoveImageAtIndex}
                 />

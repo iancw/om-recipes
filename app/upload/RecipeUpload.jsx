@@ -11,6 +11,7 @@ import { cn } from 'lib/cn';
 import {
   parseRecipeSettingsFromExif,
   parseCameraMetadataFromExif,
+  extractExifOrientation,
   extractThumbnailDataUrl,
   RECIPE_EXIFTOOL_ARGS,
   THUMBNAIL_EXIFTOOL_ARGS
@@ -45,16 +46,21 @@ function buildRejectionError(errors) {
 // Safari (which never reports navigator.deviceMemory, so the old low-memory
 // guard never engaged there). The embedded thumbnail comes back as a few KB of
 // base64 text through the same exiftool WASM pass, costing negligible memory.
+// The thumbnail is a bare JPEG with no orientation of its own, so the parent
+// file's EXIF Orientation is read in the same pass for the caller to apply.
 // A failure here is non-fatal: the file still uploads, it just has no preview.
-export async function readEmbeddedThumbnailDataUrl(file) {
+export async function readEmbeddedThumbnail(file) {
   try {
     const result = await parseMetadata(file, { args: THUMBNAIL_EXIFTOOL_ARGS });
     if (!result?.success) {
-      return null;
+      return { dataUrl: null, orientation: 1 };
     }
-    return extractThumbnailDataUrl(result.data);
+    return {
+      dataUrl: extractThumbnailDataUrl(result.data),
+      orientation: extractExifOrientation(result.data)
+    };
   } catch {
-    return null;
+    return { dataUrl: null, orientation: 1 };
   }
 }
 
@@ -92,7 +98,10 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     }
 
     file.cameraMetadata = parseCameraMetadataFromExif(result.data);
-    file.previewDataUrl = await readEmbeddedThumbnailDataUrl(file);
+
+    const thumbnail = await readEmbeddedThumbnail(file);
+    file.previewDataUrl = thumbnail.dataUrl;
+    file.previewOrientation = thumbnail.orientation;
 
     return parseRecipeSettingsFromExif(result.data);
   };

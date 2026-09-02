@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect, afterAll } from 'vitest';
 import { dispose as disposeExifTool, parseMetadata } from '@uswriting/exiftool';
 
-import { THUMBNAIL_EXIFTOOL_ARGS, extractThumbnailDataUrl } from '../lib/exifparse.js';
+import { THUMBNAIL_EXIFTOOL_ARGS, extractExifOrientation, extractThumbnailDataUrl } from '../lib/exifparse.js';
 
 // Exercises the real @uswriting/exiftool WASM binary: the upload preview now
 // relies on the JPEG's embedded EXIF thumbnail instead of decoding the
@@ -32,5 +32,16 @@ describe('embedded thumbnail extraction against the real exiftool binary', () =>
         // smaller than the full image.
         expect(bytes.length).toBeGreaterThan(512);
         expect(bytes.length).toBeLessThan(buf.length);
+    });
+
+    it('reads the parent-file EXIF orientation in the same pass', async () => {
+        // OM_recipe_3.jpg is a portrait frame stored rotated (Orientation 8);
+        // the bare thumbnail has no orientation, so this value is what rights it.
+        const buf = readFileSync('data/samples/OM_recipe_3.jpg');
+        const file = new File([buf], 'OM_recipe_3.jpg', { type: 'image/jpeg' });
+
+        const result = await parseMetadata(file, { args: THUMBNAIL_EXIFTOOL_ARGS });
+        expect(result?.success).toBe(true);
+        expect(extractExifOrientation(result.data)).toBe(8);
     });
 });

@@ -5,12 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     SectionFormFields,
     SectionPreview,
-    cssTransformForExifOrientation,
-    getSectionPreviews,
+    getSectionPreviewUrls,
     removePendingFileAtIndex
 } from '../app/upload/RecipeUploadSection.jsx';
-
-const previewOf = (url, orientation = 1) => ({ url, orientation });
 
 describe('RecipeUploadSection', () => {
     it('renders visible remove controls for each grouped image preview', () => {
@@ -18,7 +15,7 @@ describe('RecipeUploadSection', () => {
             React.createElement(SectionPreview, {
                 recipeId: 'section-fp-1',
                 fileNames: ['one.jpg', 'two.jpg'],
-                previews: [previewOf('data:image/jpeg;base64,AAA'), previewOf('data:image/jpeg;base64,BBB')],
+                previewUrls: ['data:image/jpeg;base64,AAA', 'data:image/jpeg;base64,BBB'],
                 removeDisabled: false,
                 onRemoveImageAtIndex: vi.fn()
             })
@@ -34,7 +31,7 @@ describe('RecipeUploadSection', () => {
             React.createElement(SectionPreview, {
                 recipeId: 'section-fp-1',
                 fileNames: ['one.jpg'],
-                previews: [previewOf('data:image/jpeg;base64,/9j/THUMB')],
+                previewUrls: ['data:image/jpeg;base64,/9j/THUMB'],
                 removeDisabled: false,
                 onRemoveImageAtIndex: vi.fn()
             })
@@ -43,18 +40,22 @@ describe('RecipeUploadSection', () => {
         expect(markup).toContain('src="data:image/jpeg;base64,/9j/THUMB"');
     });
 
-    it('rotates the preview image to match the JPEG EXIF orientation', () => {
+    it('does not apply a CSS transform to the preview image', () => {
+        // The thumbnail is re-encoded upright at extraction time; a CSS
+        // transform: rotate() on an <img> in an overflow:hidden box crashes
+        // mobile Safari.
         const markup = renderToStaticMarkup(
             React.createElement(SectionPreview, {
                 recipeId: 'section-fp-1',
                 fileNames: ['portrait.jpg'],
-                previews: [previewOf('data:image/jpeg;base64,/9j/THUMB', 8)],
+                previewUrls: ['data:image/jpeg;base64,/9j/THUMB'],
                 removeDisabled: false,
                 onRemoveImageAtIndex: vi.fn()
             })
         );
 
-        expect(markup).toContain('rotate(270deg)');
+        expect(markup).not.toContain('transform');
+        expect(markup).not.toContain('rotate(');
     });
 
     it('shows an unavailable notice when a grouped file has no embedded thumbnail', () => {
@@ -62,7 +63,7 @@ describe('RecipeUploadSection', () => {
             React.createElement(SectionPreview, {
                 recipeId: 'section-fp-1',
                 fileNames: ['one.jpg'],
-                previews: [previewOf(null)],
+                previewUrls: [null],
                 removeDisabled: false,
                 onRemoveImageAtIndex: vi.fn()
             })
@@ -71,33 +72,23 @@ describe('RecipeUploadSection', () => {
         expect(markup).toContain('Preview unavailable.');
     });
 
-    it('derives section previews from each file\'s extracted thumbnail and orientation', () => {
+    it('derives section preview URLs from each file\'s extracted thumbnail', () => {
         const files = [
-            { name: 'one.jpg', previewDataUrl: 'data:image/jpeg;base64,AAA', previewOrientation: 8 },
+            { name: 'one.jpg', previewDataUrl: 'data:image/jpeg;base64,AAA' },
             { name: 'two.jpg' },
             null
         ];
 
-        expect(getSectionPreviews(files)).toEqual([
-            { url: 'data:image/jpeg;base64,AAA', orientation: 8 },
-            { url: null, orientation: 1 },
-            { url: null, orientation: 1 }
+        expect(getSectionPreviewUrls(files)).toEqual([
+            'data:image/jpeg;base64,AAA',
+            null,
+            null
         ]);
     });
 
-    it('returns an empty list of previews when a section has no files', () => {
-        expect(getSectionPreviews([])).toEqual([]);
-        expect(getSectionPreviews(undefined)).toEqual([]);
-    });
-
-    it('maps EXIF orientation values to CSS transforms', () => {
-        expect(cssTransformForExifOrientation(1)).toBe('');
-        expect(cssTransformForExifOrientation(3)).toBe('rotate(180deg)');
-        expect(cssTransformForExifOrientation(6)).toBe('rotate(90deg)');
-        expect(cssTransformForExifOrientation(8)).toBe('rotate(270deg)');
-        expect(cssTransformForExifOrientation(2)).toBe('scaleX(-1)');
-        expect(cssTransformForExifOrientation(undefined)).toBe('');
-        expect(cssTransformForExifOrientation(99)).toBe('');
+    it('returns an empty list of preview URLs when a section has no files', () => {
+        expect(getSectionPreviewUrls([])).toEqual([]);
+        expect(getSectionPreviewUrls(undefined)).toEqual([]);
     });
 
     it('removes the targeted file from a section', () => {

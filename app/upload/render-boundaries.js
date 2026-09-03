@@ -16,26 +16,10 @@ function areArraysEqual(left, right) {
     return true;
 }
 
-function arePreviewListsEqual(left, right) {
-    if (left === right) return true;
-    if (!Array.isArray(left) || !Array.isArray(right)) return false;
-    if (left.length !== right.length) return false;
-
-    for (let index = 0; index < left.length; index += 1) {
-        const a = left[index] || {};
-        const b = right[index] || {};
-        if (a.url !== b.url || a.orientation !== b.orientation) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 export function areSectionPreviewPropsEqual(prevProps, nextProps) {
     return prevProps.recipeId === nextProps.recipeId
         && areArraysEqual(prevProps.fileNames, nextProps.fileNames)
-        && arePreviewListsEqual(prevProps.previews, nextProps.previews)
+        && areArraysEqual(prevProps.previewUrls, nextProps.previewUrls)
         && prevProps.removeDisabled === nextProps.removeDisabled;
 }
 

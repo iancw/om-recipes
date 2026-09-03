@@ -8,7 +8,15 @@ import { Alert } from 'components/alert';
 import { Button } from 'components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from 'components/ui/card';
 import { cn } from 'lib/cn';
-import { parseRecipeSettingsFromExif, parseCameraMetadataFromExif, RECIPE_EXIFTOOL_ARGS } from 'lib/exifparse';
+import {
+  parseRecipeSettingsFromExif,
+  parseCameraMetadataFromExif,
+  extractExifOrientation,
+  extractThumbnailDataUrl,
+  RECIPE_EXIFTOOL_ARGS,
+  THUMBNAIL_EXIFTOOL_ARGS
+} from 'lib/exifparse';
+import { orientImageDataUrl } from 'lib/orient-image.js';
 import { computeRecipeFingerprint } from 'lib/recipeFingerprint.js';
 
 import { buildUploadSections } from './group-upload-candidates.js';
@@ -30,6 +38,36 @@ function buildRejectionError(errors) {
     .map((error) => error?.message || 'Unsupported file.')
     .filter(Boolean)
     .join(' ');
+}
+
+// Build the review thumbnail from the JPEG's own embedded EXIF thumbnail
+// rather than decoding the full-resolution original: decoding a ~20MP
+// straight-out-of-camera JPG in the browser is the single largest allocation in
+// the upload flow and reliably reloads the tab on mobile Safari. The embedded
+// thumbnail is ~160x120 and comes back as a few KB of base64 through the same
+// exiftool WASM pass.
+//
+// It is a bare JPEG with no orientation of its own, so the parent file's EXIF
+// Orientation is read in the same pass and baked into the pixels on a small
+// canvas (see lib/orient-image.js). A CSS `transform: rotate()` on the <img>
+// instead — which is what this used to do — also crashes mobile Safari, via
+// runaway compositing-layer allocation. Rotating the 160x120 thumbnail on a
+// canvas is a few KB of work and safe. A failure here is non-fatal: the file
+// still uploads, it just has no preview.
+export async function readEmbeddedThumbnailDataUrl(file) {
+  try {
+    const result = await parseMetadata(file, { args: THUMBNAIL_EXIFTOOL_ARGS });
+    if (!result?.success) {
+      return null;
+    }
+    const dataUrl = extractThumbnailDataUrl(result.data);
+    if (!dataUrl) {
+      return null;
+    }
+    return orientImageDataUrl(dataUrl, extractExifOrientation(result.data));
+  } catch {
+    return null;
+  }
 }
 
 let exifBatchQueue = Promise.resolve();
@@ -66,6 +104,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
     }
 
     file.cameraMetadata = parseCameraMetadataFromExif(result.data);
+    file.previewDataUrl = await readEmbeddedThumbnailDataUrl(file);
 
     return parseRecipeSettingsFromExif(result.data);
   };

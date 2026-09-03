@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     SectionFormFields,
     SectionPreview,
+    getSectionPreviewUrls,
     removePendingFileAtIndex
 } from '../app/upload/RecipeUploadSection.jsx';
 
@@ -14,9 +15,7 @@ describe('RecipeUploadSection', () => {
             React.createElement(SectionPreview, {
                 recipeId: 'section-fp-1',
                 fileNames: ['one.jpg', 'two.jpg'],
-                previewUrls: ['blob:one', 'blob:two'],
-                disablePreview: false,
-                isPreparingPreview: false,
+                previewUrls: ['data:image/jpeg;base64,AAA', 'data:image/jpeg;base64,BBB'],
                 removeDisabled: false,
                 onRemoveImageAtIndex: vi.fn()
             })
@@ -25,6 +24,71 @@ describe('RecipeUploadSection', () => {
         expect(markup).toContain('aria-label="Remove image one.jpg"');
         expect(markup).toContain('aria-label="Remove image two.jpg"');
         expect(markup).not.toContain('>Remove image<');
+    });
+
+    it('renders the embedded-thumbnail data URL as the preview image', () => {
+        const markup = renderToStaticMarkup(
+            React.createElement(SectionPreview, {
+                recipeId: 'section-fp-1',
+                fileNames: ['one.jpg'],
+                previewUrls: ['data:image/jpeg;base64,/9j/THUMB'],
+                removeDisabled: false,
+                onRemoveImageAtIndex: vi.fn()
+            })
+        );
+
+        expect(markup).toContain('src="data:image/jpeg;base64,/9j/THUMB"');
+    });
+
+    it('does not apply a CSS transform to the preview image', () => {
+        // The thumbnail is re-encoded upright at extraction time; a CSS
+        // transform: rotate() on an <img> in an overflow:hidden box crashes
+        // mobile Safari.
+        const markup = renderToStaticMarkup(
+            React.createElement(SectionPreview, {
+                recipeId: 'section-fp-1',
+                fileNames: ['portrait.jpg'],
+                previewUrls: ['data:image/jpeg;base64,/9j/THUMB'],
+                removeDisabled: false,
+                onRemoveImageAtIndex: vi.fn()
+            })
+        );
+
+        expect(markup).not.toContain('transform');
+        expect(markup).not.toContain('rotate(');
+    });
+
+    it('shows an unavailable notice when a grouped file has no embedded thumbnail', () => {
+        const markup = renderToStaticMarkup(
+            React.createElement(SectionPreview, {
+                recipeId: 'section-fp-1',
+                fileNames: ['one.jpg'],
+                previewUrls: [null],
+                removeDisabled: false,
+                onRemoveImageAtIndex: vi.fn()
+            })
+        );
+
+        expect(markup).toContain('Preview unavailable.');
+    });
+
+    it('derives section preview URLs from each file\'s extracted thumbnail', () => {
+        const files = [
+            { name: 'one.jpg', previewDataUrl: 'data:image/jpeg;base64,AAA' },
+            { name: 'two.jpg' },
+            null
+        ];
+
+        expect(getSectionPreviewUrls(files)).toEqual([
+            'data:image/jpeg;base64,AAA',
+            null,
+            null
+        ]);
+    });
+
+    it('returns an empty list of preview URLs when a section has no files', () => {
+        expect(getSectionPreviewUrls([])).toEqual([]);
+        expect(getSectionPreviewUrls(undefined)).toEqual([]);
     });
 
     it('removes the targeted file from a section', () => {

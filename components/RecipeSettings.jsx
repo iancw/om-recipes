@@ -91,14 +91,9 @@ function RecipeSettings({ recipe }) {
         mids={Number(recipe.midtones ?? 0)}
         highlights={Number(recipe.highlights ?? 0)}
       />
-      <div style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "stretch" ,
-        margin: 10
-        }}>
+      <div className="recipe-wb-adjust">
         {(recipe.whiteBalanceGreenOffset !== undefined || recipe.whiteBalanceAmberOffset !== undefined) && (
-          <div style={{ marginBottom: "1em" }}>
+          <div>
             <WhiteBalanceBox
               wb={recipe.whiteBalance2}
               wbTemperature={recipe.whiteBalanceTemperature}

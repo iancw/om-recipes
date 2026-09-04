@@ -4,7 +4,7 @@ export default function ImageAdjustSliders({ vignette = 0, sharpness = 0, contra
   return (
     <div style={{ margin: "1rem 0" }}>
       <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center" }}>
-        <p style={{ width: 100, display: "inline-block" }}>Shading Effect: {vignette}</p>
+        <p style={{ width: 150, display: "inline-block" }}>Shading Effect: {vignette}</p>
         <input
           type="range"
           min={-5}
@@ -16,7 +16,7 @@ export default function ImageAdjustSliders({ vignette = 0, sharpness = 0, contra
         />
       </div>
       <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center" }}>
-        <p style={{ width: 100, display: "inline-block" }}>Sharpness: {sharpness}</p>
+        <p style={{ width: 150, display: "inline-block" }}>Sharpness: {sharpness}</p>
         <input
           type="range"
           min={-2}
@@ -28,7 +28,7 @@ export default function ImageAdjustSliders({ vignette = 0, sharpness = 0, contra
         />
       </div>
       <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center" }}>
-        <p style={{ width: 100, display: "inline-block" }}>Contrast: {contrast}</p>
+        <p style={{ width: 150, display: "inline-block" }}>Contrast: {contrast}</p>
         <input
           type="range"
           min={-2}
@@ -40,8 +40,8 @@ export default function ImageAdjustSliders({ vignette = 0, sharpness = 0, contra
         />
       </div>
       <div style={{ marginBottom: "0.75rem", display: "flex", alignItems: "center" }}>
-        <p style={{ width: 100 }}>Exposure Comp: {exposureCompensation}</p>
-        <p><input
+        <p style={{ width: 150, display: "inline-block" }}>Exposure Comp: {exposureCompensation}</p>
+        <input
           type="range"
           min={-2}
           max={2}
@@ -50,7 +50,6 @@ export default function ImageAdjustSliders({ vignette = 0, sharpness = 0, contra
           disabled
           style={{ width: 160 }}
         />
-        </p>
       </div>
     </div>
   );

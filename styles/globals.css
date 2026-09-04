@@ -97,6 +97,17 @@
         }
     }
 
+    /*
+     * Drive the settings layout off the space actually available to it (works
+     * inside both the recipe detail modal and the standalone recipe page)
+     * rather than the viewport width. The wheel and tone curve are each a fixed
+     * 280px; as soon as 280 + 280 + the 1.5rem gap fit, pair them side by side
+     * and let the slider column wrap underneath until it fits on the row too.
+     */
+    :has(> .recipe-card-settings-flex) {
+        container: recipe-settings / inline-size;
+    }
+
     .recipe-card-settings-flex {
         display: flex;
         flex-direction: column;
@@ -104,6 +115,54 @@
         gap: 1.5rem;
         margin: 1.5rem 0;
         width: 100%;
+    }
+
+    @container recipe-settings (min-width: 584px) {
+        .recipe-card-settings-flex {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+    }
+
+    /* Left-align the wheel only while the settings are stacked in a column. */
+    @container recipe-settings (max-width: 583.98px) {
+        .saturation-wheel-container {
+            margin-left: 0 !important;
+            margin-right: auto !important;
+        }
+    }
+
+    /*
+     * White balance box + image-adjust sliders.
+     *  - narrow: stacked in a column with everything else
+     *  - mid: the settings row has wrapped onto its own line, so there is room
+     *    to sit the box and sliders side by side
+     *  - wide: the wheel, tone curve and this panel all share one row, so stack
+     *    the box above its sliders again to keep that row from getting too wide
+     */
+    .recipe-wb-adjust {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+        margin: 10px;
+        max-width: 100%;
+    }
+
+    @container recipe-settings (min-width: 584px) {
+        .recipe-wb-adjust {
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+        }
+    }
+
+    @container recipe-settings (min-width: 920px) {
+        .recipe-wb-adjust {
+            flex-direction: column;
+            gap: 1rem;
+        }
     }
 
     .recipe-notes-image-row {
@@ -116,24 +175,11 @@
     }
 
     @media (min-width: 900px) {
-        .recipe-card-settings-flex {
-            flex-direction: row;
-            align-items: flex-start;
-        }
         .recipe-notes-image-row {
             display: flex;
             flex-direction: row;
             align-items: flex-start;
         }
-    }
-
-
-    /* Responsive left-alignment for SaturationWheel container on narrow views */
-    @media (max-width: 900px) {
-      .saturation-wheel-container {
-        margin-left: 0 !important;
-        margin-right: auto !important;
-      }
     }
 
     .btn {

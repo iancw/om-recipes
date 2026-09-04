@@ -13,6 +13,8 @@ import {
   parseCameraMetadataFromExif,
   extractExifOrientation,
   extractThumbnailDataUrl,
+  hasDetectedRecipe,
+  headSliceForExif,
   RECIPE_EXIFTOOL_ARGS,
   THUMBNAIL_EXIFTOOL_ARGS
 } from 'lib/exifparse';
@@ -54,9 +56,9 @@ function buildRejectionError(errors) {
 // runaway compositing-layer allocation. Rotating the 160x120 thumbnail on a
 // canvas is a few KB of work and safe. A failure here is non-fatal: the file
 // still uploads, it just has no preview.
-export async function readEmbeddedThumbnailDataUrl(file) {
+export async function readEmbeddedThumbnailDataUrl(source) {
   try {
-    const result = await parseMetadata(file, { args: THUMBNAIL_EXIFTOOL_ARGS });
+    const result = await parseMetadata(source, { args: THUMBNAIL_EXIFTOOL_ARGS });
     if (!result?.success) {
       return null;
     }
@@ -95,18 +97,28 @@ export default function RecipeUpload({ initialAuthor = "" }) {
   const parsedImageCount = sections.reduce((count, section) => count + section.fileIds.length, 0);
 
   const parseExif = async (file) => {
-    const result = await parseMetadata(file, {
-      args: RECIPE_EXIFTOOL_ARGS
-    });
+    // Parse only the first ~1.5 MB so the exiftool WASM instance stays small on
+    // mobile Safari. If that slice doesn't contain this camera's recipe maker
+    // notes (or the parse errors on a truncated APP1), fall back to the whole
+    // file.
+    let source = headSliceForExif(file);
+    let result = await parseMetadata(source, { args: RECIPE_EXIFTOOL_ARGS });
+    let settings = result?.success ? parseRecipeSettingsFromExif(result.data) : null;
+
+    if (source !== file && !hasDetectedRecipe(settings)) {
+      source = file;
+      result = await parseMetadata(source, { args: RECIPE_EXIFTOOL_ARGS });
+      settings = result?.success ? parseRecipeSettingsFromExif(result.data) : null;
+    }
 
     if (!result?.success) {
       throw new Error(result?.error || 'Unable to read EXIF metadata');
     }
 
     file.cameraMetadata = parseCameraMetadataFromExif(result.data);
-    file.previewDataUrl = await readEmbeddedThumbnailDataUrl(file);
+    file.previewDataUrl = await readEmbeddedThumbnailDataUrl(source);
 
-    return parseRecipeSettingsFromExif(result.data);
+    return settings ?? parseRecipeSettingsFromExif(result.data);
   };
 
   const clearReview = () => {
@@ -135,7 +147,7 @@ export default function RecipeUpload({ initialAuthor = "" }) {
             try {
               const recipeSettings = await parseExif(file);
 
-              if (!recipeSettings?.hasColorProfileSettings && !recipeSettings?.hasMonochromeProfileSettings) {
+              if (!hasDetectedRecipe(recipeSettings)) {
                 nextParsedCandidates.push({
                   id,
                   file,

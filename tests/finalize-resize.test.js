@@ -11,6 +11,7 @@ let getObjectMock = vi.fn();
 let deleteObjectMock = vi.fn();
 let invokeMock = vi.fn();
 let requireUserMock = vi.fn();
+let afterMock = vi.fn();
 let finalizeRecipeUploadAction;
 let ResizeTimeoutError;
 let updateSetCalls = [];
@@ -31,6 +32,10 @@ function makeSelectChain(result) {
 
 vi.mock('../lib/auth.js', () => ({
     requireUser: (...args) => requireUserMock(...args)
+}));
+
+vi.mock('next/server', () => ({
+    after: (...args) => afterMock(...args)
 }));
 
 vi.mock('../lib/oci/functionsInvoke.js', () => ({
@@ -83,6 +88,7 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
         getObjectMock = vi.fn();
         deleteObjectMock = vi.fn();
         invokeMock = vi.fn();
+        afterMock = vi.fn();
         requireUserMock = vi.fn(async () => ({
             user: {
                 id: 3,
@@ -162,6 +168,24 @@ describe('finalizeRecipeUploadAction security and resize orchestration', () => {
         expect(result.resizeAttempted).toBe(true);
         expect(result.resizeSucceeded).toBe(false);
         expect(result.resizeSkipped).toBe(false);
+    });
+
+    it('registers the resize work with after() so it survives the response', async () => {
+        headObjectMock.mockResolvedValueOnce({ contentLength: 100 });
+        invokeMock.mockResolvedValueOnce({ ok: true });
+
+        await finalizeRecipeUploadAction({
+            parameters: {
+                imageId: 2,
+                originalFileSize: 100
+            }
+        });
+
+        expect(afterMock).toHaveBeenCalledTimes(1);
+        expect(afterMock.mock.calls[0][0]).toBeInstanceOf(Promise);
+        await vi.waitFor(() => {
+            expect(invokeMock).toHaveBeenCalledTimes(1);
+        });
     });
 
     it('does not verify a processed object after a successful publish queue', async () => {

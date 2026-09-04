@@ -1,4 +1,5 @@
 'use server';
+import { after } from 'next/server';
 import { createHash, randomUUID } from 'node:crypto';
 import { db } from '../../db/index.ts';
 import {
@@ -498,6 +499,21 @@ async function findExistingImageAssociationByShaExcludingImage(sha256, excludeIm
     return findExistingImageAssociationByImageId(existing[0].id);
 }
 
+// Keep a fire-and-forget promise alive past the server action's response.
+// On a serverless platform the function instance can be frozen or recycled as
+// soon as the response is sent, aborting any in-flight resize invocation and
+// leaving the image with no renditions (a "stuck" preview that never loads).
+// `after()` registers the work with the request lifecycle so the platform waits
+// for it. Outside a request scope (unit tests) `after()` throws, so fall back to
+// plain fire-and-forget, which is the pre-existing behavior.
+function keepAlivePastResponse(promise) {
+    try {
+        after(promise);
+    } catch {
+        void promise;
+    }
+}
+
 function queueRenditionPublish({ imageId, authorId, recipeId, objectKey }) {
     return invokeResizeWithRetry({
         sourceBucket: ORIGINAL_BUCKET,
@@ -922,12 +938,12 @@ export async function finalizeRecipeUploadAction({ parameters }) {
                 resizeStatus.resizeSkipped = true;
             } else {
                 resizeStatus.resizeAttempted = true;
-                void queueRenditionPublish({
+                keepAlivePastResponse(queueRenditionPublish({
                     imageId: requestedImageId,
                     authorId: img[0].authorId,
                     recipeId: preparedRecipeId,
                     objectKey: preparedObjectKey
-                });
+                }));
             }
             await revalidatePublicRecipeCatalog();
             return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
@@ -1018,12 +1034,12 @@ export async function finalizeRecipeUploadAction({ parameters }) {
         }
 
         resizeStatus.resizeAttempted = true;
-        void queueRenditionPublish({
+        keepAlivePastResponse(queueRenditionPublish({
             imageId: requestedImageId,
             authorId: img[0].authorId,
             recipeId: preparedRecipeId,
             objectKey: preparedObjectKey
-        });
+        }));
 
         await revalidatePublicRecipeCatalog();
         return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };

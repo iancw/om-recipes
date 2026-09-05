@@ -29,9 +29,9 @@ vi.mock('../lib/public-recipe-catalog-cache.js', () => ({
     revalidateRecipeDetail: (...args) => revalidateRecipeDetailMock(...args)
 }));
 
-let reconcileUserStateMock;
+let reconcileUserStateBestEffortMock;
 vi.mock('../lib/user-state-flush.js', () => ({
-    reconcileUserState: (...args) => reconcileUserStateMock(...args)
+    reconcileUserStateBestEffort: (...args) => reconcileUserStateBestEffortMock(...args)
 }));
 
 vi.mock('../db/index.ts', () => ({
@@ -47,7 +47,7 @@ describe('finalizeRecipeUploadAction notifies on sample image add', () => {
         vi.resetModules();
         notifySampleImageAddedMock = vi.fn(() => Promise.resolve());
         revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
-        reconcileUserStateMock = vi.fn(() => Promise.resolve());
+        reconcileUserStateBestEffortMock = vi.fn(() => Promise.resolve());
 
         // First select: the image + author join lookup inside finalizeRecipeUploadAction.
         selectMock = vi.fn(() => ({
@@ -91,6 +91,6 @@ describe('finalizeRecipeUploadAction notifies on sample image add', () => {
 
         expect(notifySampleImageAddedMock).toHaveBeenCalledWith(5, 100, 2);
         expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(5);
-        expect(reconcileUserStateMock).toHaveBeenCalledWith('owner-uuid');
+        expect(reconcileUserStateBestEffortMock).toHaveBeenCalledWith('owner-uuid');
     });
 });

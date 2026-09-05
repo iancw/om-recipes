@@ -9,7 +9,7 @@ let addCommentMock;
 let deleteCommentMock;
 let notifyRecipeCommentedMock;
 let findOrCreateAuthorForUserMock;
-let reconcileUserStateMock;
+let reconcileUserStateBestEffortMock;
 
 vi.mock('../lib/auth.js', () => ({
     requireUser: () => Promise.resolve({ user: { id: 9, uuid: 'commenter-uuid' } }),
@@ -17,7 +17,7 @@ vi.mock('../lib/auth.js', () => ({
 }));
 
 vi.mock('../lib/user-state-flush.js', () => ({
-    reconcileUserState: (...args) => reconcileUserStateMock(...args)
+    reconcileUserStateBestEffort: (...args) => reconcileUserStateBestEffortMock(...args)
 }));
 
 vi.mock('../lib/comments.js', () => ({
@@ -52,7 +52,7 @@ describe('addCommentAction', () => {
         notifyRecipeCommentedMock = vi.fn(() => Promise.resolve());
         findOrCreateAuthorForUserMock = vi.fn(() => Promise.resolve({ id: 2, uuid: 'author-uuid', name: 'Commenter' }));
         revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
-        reconcileUserStateMock = vi.fn(() => Promise.resolve());
+        reconcileUserStateBestEffortMock = vi.fn(() => Promise.resolve());
 
         const recipeSelectResponses = [
             [{ id: 123, uuid: 'recipe-uuid', slug: 'recipe-slug' }],
@@ -85,7 +85,7 @@ describe('addCommentAction', () => {
         expect(notifyRecipeCommentedMock).toHaveBeenCalledWith(123, 55, 2);
         expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(123);
         expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/recipe-slug');
-        expect(reconcileUserStateMock).toHaveBeenCalledWith('commenter-uuid');
+        expect(reconcileUserStateBestEffortMock).toHaveBeenCalledWith('commenter-uuid');
     });
 
     it('rejects a non-numeric recipe id', async () => {

@@ -45,9 +45,8 @@ const getRecipeByIdOrSlug = cache(async function getRecipeByIdOrSlug(idOrSlug, u
         // from /recipes/resolve.
         slug: indexEntry.slug,
         viewerIsLoggedIn: userId != null,
-        // No eager saved-status query: whether the viewer has saved this
-        // recipe isn't shown until they toggle it (the save button asks the
-        // server for the real state at that point, not this page).
+        // Defaults false; Page() below overrides this from the per-user
+        // saved-state cache for logged-in viewers.
         isSaved: false
     };
 });

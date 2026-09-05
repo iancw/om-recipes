@@ -10,14 +10,14 @@ let deleteMock;
 let selectResponses;
 let updateResponses;
 let insertResponses;
-let reconcileUserStateMock;
+let reconcileUserStateBestEffortMock;
 
 vi.mock('next/headers', () => ({
     cookies: () => Promise.resolve(cookieStore)
 }));
 
 vi.mock('../lib/user-state-flush.js', () => ({
-    reconcileUserState: (...args) => reconcileUserStateMock(...args)
+    reconcileUserStateBestEffort: (...args) => reconcileUserStateBestEffortMock(...args)
 }));
 
 vi.mock('../db/index.ts', () => ({
@@ -92,7 +92,7 @@ describe('lib/auth.js session handling', () => {
         updateMock = vi.fn(() => makeUpdateChain(updateResponses.shift()));
         insertMock = vi.fn(() => makeInsertChain(insertResponses.shift()));
         deleteMock = vi.fn(() => makeDeleteChain());
-        reconcileUserStateMock = vi.fn(() => Promise.resolve());
+        reconcileUserStateBestEffortMock = vi.fn(() => Promise.resolve());
 
         vi.resetModules();
         const mod = await import('../lib/auth.js');
@@ -258,7 +258,7 @@ describe('lib/auth.js session handling', () => {
             expect(payload).toMatchObject({ sid: 55, uid: 7, uuid: 'user-uuid-abc' });
             expect(payload.reval).toBe(payload.iat);
             expect(payload.exp).toBeGreaterThan(payload.iat);
-            expect(reconcileUserStateMock).toHaveBeenCalledWith('user-uuid-abc');
+            expect(reconcileUserStateBestEffortMock).toHaveBeenCalledWith('user-uuid-abc');
         });
     });
 });

@@ -507,6 +507,65 @@ describe('privacy workflows', () => {
         expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(502);
     });
 
+    it('completes account deletion even when the user-state blob cleanup fails', async () => {
+        const { startAccountDeletion } = await import('../lib/privacy.js');
+
+        deleteUserStateKeyMock = vi.fn(async () => {
+            throw new Error('blobs outage');
+        });
+
+        selectHandlers.push(
+            () => makeSelectChain([]),
+            () => makeSelectChain([{ id: 88 }]),
+            () => makeSelectChain([{ id: 700 }, { id: 701 }])
+        );
+
+        insertHandlers.push(() => ({
+            values: vi.fn(() => ({
+                returning: vi.fn(() =>
+                    Promise.resolve([
+                        {
+                            id: 2,
+                            userId: 5,
+                            subjectUserUuid: 'user-uuid',
+                            requestType: 'delete_account'
+                        }
+                    ])
+                )
+            }))
+        }));
+
+        updateHandlers.push(
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            }),
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            })
+        );
+
+        deleteHandlers.push(
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve([{ id: 501 }, { id: 502 }])) })) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) })
+        );
+
+        await expect(
+            startAccountDeletion({
+                userId: 5,
+                userUuid: 'user-uuid'
+            })
+        ).resolves.toBe(2);
+    });
+
     it('clears expired export artifacts and abandoned uploads during retention cleanup', async () => {
         const { runPrivacyRetentionCleanup } = await import('../lib/privacy.js');
 

@@ -11,6 +11,7 @@ vi.mock('../lib/user-state-store.js', () => ({
 
 vi.mock('../lib/user-state-cache.js', () => ({
     stateKey: (uuid) => `state/users/${uuid}.json`,
+    pendingKey: (uuid) => `pending/${uuid}`,
     clearUserStateDirty: (...args) => clearUserStateDirtyMock(...args),
     listDirtyUserUuids: (...args) => listDirtyUserUuidsMock(...args)
 }));
@@ -26,8 +27,12 @@ describe('reconcileUserState', () => {
         reconcileSavedRecipesForUserMock = vi.fn(() => Promise.resolve());
     });
 
-    it('reconciles the blob\'s saved ids into Postgres and clears the dirty marker', async () => {
-        getUserStateJsonMock = vi.fn(() => Promise.resolve({ savedRecipeIds: [1, 2], userId: 20, hydratedAt: 1 }));
+    it('reconciles the blob\'s saved ids into Postgres and clears the dirty marker when it is unchanged', async () => {
+        const marker = { since: 100 };
+        getUserStateJsonMock = vi.fn((key) => {
+            if (key === 'pending/abc-uuid') return Promise.resolve(marker);
+            return Promise.resolve({ savedRecipeIds: [1, 2], userId: 20, hydratedAt: 1 });
+        });
         const { reconcileUserState } = await import('../lib/user-state-flush.js');
 
         await reconcileUserState('abc-uuid');
@@ -36,14 +41,58 @@ describe('reconcileUserState', () => {
         expect(clearUserStateDirtyMock).toHaveBeenCalledWith('abc-uuid');
     });
 
-    it('clears the dirty marker without touching Postgres when the blob no longer exists', async () => {
+    it('reconciles into Postgres but leaves the dirty marker set when it changed during reconciliation', async () => {
+        let pendingCallCount = 0;
+        getUserStateJsonMock = vi.fn((key) => {
+            if (key === 'pending/abc-uuid') {
+                pendingCallCount += 1;
+                return Promise.resolve(pendingCallCount === 1 ? { since: 100 } : { since: 200 });
+            }
+            return Promise.resolve({ savedRecipeIds: [1, 2], userId: 20, hydratedAt: 1 });
+        });
+        const { reconcileUserState } = await import('../lib/user-state-flush.js');
+
+        await reconcileUserState('abc-uuid');
+
+        expect(reconcileSavedRecipesForUserMock).toHaveBeenCalledWith({ userId: 20, desiredRecipeIds: [1, 2] });
+        expect(clearUserStateDirtyMock).not.toHaveBeenCalled();
+    });
+
+    it('does nothing and returns immediately when there is no pending marker', async () => {
         getUserStateJsonMock = vi.fn(() => Promise.resolve(null));
         const { reconcileUserState } = await import('../lib/user-state-flush.js');
 
         await reconcileUserState('abc-uuid');
 
         expect(reconcileSavedRecipesForUserMock).not.toHaveBeenCalled();
+        expect(clearUserStateDirtyMock).not.toHaveBeenCalled();
+    });
+
+    it('clears the dirty marker without touching Postgres when the blob no longer exists but the marker does', async () => {
+        const marker = { since: 100 };
+        getUserStateJsonMock = vi.fn((key) => {
+            if (key === 'pending/abc-uuid') return Promise.resolve(marker);
+            return Promise.resolve(null);
+        });
+        const { reconcileUserState } = await import('../lib/user-state-flush.js');
+
+        await reconcileUserState('abc-uuid');
+
+        expect(reconcileSavedRecipesForUserMock).not.toHaveBeenCalled();
         expect(clearUserStateDirtyMock).toHaveBeenCalledWith('abc-uuid');
+    });
+});
+
+describe('reconcileUserStateBestEffort', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('swallows a reconciliation error instead of throwing', async () => {
+        getUserStateJsonMock = vi.fn(() => Promise.reject(new Error('boom')));
+        const { reconcileUserStateBestEffort } = await import('../lib/user-state-flush.js');
+
+        await expect(reconcileUserStateBestEffort('abc-uuid')).resolves.toBeUndefined();
     });
 });
 

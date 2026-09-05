@@ -14,6 +14,10 @@ vi.mock('../lib/user-state-flush.js', () => ({
     reconcileAllDirtyUserStates: (...args) => reconcileAllDirtyUserStatesMock(...args)
 }));
 
+vi.mock('../lib/user-state-store.js', () => ({
+    hasNetlifyBlobsContext: () => false
+}));
+
 describe('state-cache-flush scheduled function', () => {
     beforeEach(async () => {
         vi.resetModules();

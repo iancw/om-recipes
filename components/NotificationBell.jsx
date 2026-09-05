@@ -6,8 +6,10 @@ import { cn } from 'lib/cn';
 import { buttonVariants } from 'components/ui/button';
 import { getRecipePath } from 'lib/recipe-url.js';
 
+const POLL_INTERVAL_MS = 45000;
+
 function describeNotification(item) {
-    const recipeName = item.recipe?.recipeName ?? 'a recipe';
+    const recipeName = item.recipeName ?? 'a recipe';
     const actorName = item.actorAuthorName ?? 'Someone';
 
     if (item.type === 'comment') return `${actorName} commented on ${recipeName}`;
@@ -21,6 +23,7 @@ export default function NotificationBell() {
     const [open, setOpen] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [items, setItems] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
     const containerRef = useRef(null);
 
     const refresh = useCallback(async () => {
@@ -29,12 +32,50 @@ export default function NotificationBell() {
             if (!response.ok) return null;
             const data = await response.json();
             setItems(data.items ?? []);
+            setUnreadCount(data.unreadCount ?? 0);
             setLoaded(true);
             return data;
         } catch {
             return null;
         }
     }, []);
+
+    // Every poll here is a Netlify Blobs read of the viewer's own cached
+    // state, never a live Postgres query, so polling on a fixed interval no
+    // longer costs what it used to before the blob-cache work.
+    useEffect(() => {
+        refresh();
+
+        let intervalId = null;
+
+        function startPolling() {
+            if (intervalId != null) return;
+            intervalId = setInterval(refresh, POLL_INTERVAL_MS);
+        }
+
+        function stopPolling() {
+            if (intervalId == null) return;
+            clearInterval(intervalId);
+            intervalId = null;
+        }
+
+        function handleVisibilityChange() {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                refresh();
+                startPolling();
+            }
+        }
+
+        if (!document.hidden) startPolling();
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [refresh]);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -49,10 +90,6 @@ export default function NotificationBell() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [open]);
 
-    // Fully on-demand: no fetch on mount, no background polling. This bell
-    // no longer shows an unread badge without being opened — any proactive
-    // check would mean a DB query on every page view for every logged-in
-    // user, which is exactly what keeps Neon's compute from ever sleeping.
     const handleToggle = async () => {
         const next = !open;
         setOpen(next);
@@ -60,6 +97,7 @@ export default function NotificationBell() {
 
         const data = await refresh();
         if (data && data.unreadCount > 0) {
+            setUnreadCount(0);
             fetch('/api/notifications/read', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
@@ -86,6 +124,9 @@ export default function NotificationBell() {
                     />
                     <path d="M8 15.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
+                {unreadCount > 0 ? (
+                    <span aria-hidden="true" className="absolute right-1 top-1 h-2 w-2 rounded-full bg-destructive" />
+                ) : null}
             </button>
 
             {open ? (
@@ -97,9 +138,9 @@ export default function NotificationBell() {
                     ) : (
                         <ul className="max-h-96 overflow-y-auto">
                             {items.map((item) => (
-                                <li key={item.id}>
+                                <li key={item.uuid}>
                                     <Link
-                                        href={item.recipe ? getRecipePath(item.recipe) : '/'}
+                                        href={item.recipeSlug ? getRecipePath({ slug: item.recipeSlug }) : '/'}
                                         onClick={() => setOpen(false)}
                                         className="block rounded-lg px-3 py-2 text-sm text-foreground no-underline hover:bg-accent/60"
                                     >

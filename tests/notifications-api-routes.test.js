@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server.js';
 
 let requireUserMock;
-let getNotificationsForUserMock;
-let getUnreadCountMock;
-let markNotificationsReadMock;
+let getUserSavedStateMock;
+let markNotificationsReadInUserStateMock;
 let GET;
 let POST;
 
@@ -12,10 +11,11 @@ vi.mock('../lib/auth.js', () => ({
     requireUser: (...args) => requireUserMock(...args)
 }));
 
-vi.mock('../lib/notifications.js', () => ({
-    getNotificationsForUser: (...args) => getNotificationsForUserMock(...args),
-    getUnreadCount: (...args) => getUnreadCountMock(...args),
-    markNotificationsRead: (...args) => markNotificationsReadMock(...args)
+vi.mock('../lib/user-state-cache.js', () => ({
+    unreadNotificationCount: (notifications) =>
+        (notifications ?? []).filter((entry) => entry.readAt == null).length,
+    getUserSavedState: (...args) => getUserSavedStateMock(...args),
+    markNotificationsReadInUserState: (...args) => markNotificationsReadInUserStateMock(...args)
 }));
 
 describe('notifications API routes', () => {
@@ -40,16 +40,27 @@ describe('notifications API routes', () => {
             expect(response.status).toBe(401);
         });
 
-        it('returns items and unread count for an authenticated user', async () => {
-            requireUserMock = vi.fn(() => Promise.resolve({ user: { id: 9 } }));
-            getNotificationsForUserMock = vi.fn(() => Promise.resolve([{ id: 1 }]));
-            getUnreadCountMock = vi.fn(() => Promise.resolve(1));
+        it('returns the cached items and a derived unread count for an authenticated user', async () => {
+            requireUserMock = vi.fn(() => Promise.resolve({ user: { id: 9, uuid: 'user-uuid' } }));
+            getUserSavedStateMock = vi.fn(() =>
+                Promise.resolve({
+                    notifications: [
+                        { uuid: 'n-1', readAt: null },
+                        { uuid: 'n-2', readAt: 123 }
+                    ]
+                })
+            );
 
             const response = await GET();
 
-            expect(getNotificationsForUserMock).toHaveBeenCalledWith(9, { limit: 50 });
-            expect(getUnreadCountMock).toHaveBeenCalledWith(9);
-            await expect(response.json()).resolves.toEqual({ items: [{ id: 1 }], unreadCount: 1 });
+            expect(getUserSavedStateMock).toHaveBeenCalledWith('user-uuid', 9);
+            await expect(response.json()).resolves.toEqual({
+                items: [
+                    { uuid: 'n-1', readAt: null },
+                    { uuid: 'n-2', readAt: 123 }
+                ],
+                unreadCount: 1
+            });
         });
     });
 
@@ -67,9 +78,9 @@ describe('notifications API routes', () => {
             expect(response.status).toBe(401);
         });
 
-        it('marks all unread when no ids are given', async () => {
-            requireUserMock = vi.fn(() => Promise.resolve({ user: { id: 9 } }));
-            markNotificationsReadMock = vi.fn(() => Promise.resolve());
+        it('marks all unread when no uuids are given', async () => {
+            requireUserMock = vi.fn(() => Promise.resolve({ user: { id: 9, uuid: 'user-uuid' } }));
+            markNotificationsReadInUserStateMock = vi.fn(() => Promise.resolve());
 
             const request = new NextRequest('https://www.omrecipes.dev/api/notifications/read', {
                 method: 'POST',
@@ -78,22 +89,22 @@ describe('notifications API routes', () => {
             });
             const response = await POST(request);
 
-            expect(markNotificationsReadMock).toHaveBeenCalledWith(9, { ids: undefined });
+            expect(markNotificationsReadInUserStateMock).toHaveBeenCalledWith('user-uuid', 9, { uuids: undefined });
             await expect(response.json()).resolves.toEqual({ ok: true });
         });
 
-        it('marks only the given ids when provided', async () => {
-            requireUserMock = vi.fn(() => Promise.resolve({ user: { id: 9 } }));
-            markNotificationsReadMock = vi.fn(() => Promise.resolve());
+        it('marks only the given uuids when provided', async () => {
+            requireUserMock = vi.fn(() => Promise.resolve({ user: { id: 9, uuid: 'user-uuid' } }));
+            markNotificationsReadInUserStateMock = vi.fn(() => Promise.resolve());
 
             const request = new NextRequest('https://www.omrecipes.dev/api/notifications/read', {
                 method: 'POST',
-                body: JSON.stringify({ ids: [1, 2, 'x'] }),
+                body: JSON.stringify({ uuids: ['n-1', 42, 'n-2'] }),
                 headers: { 'content-type': 'application/json' }
             });
             const response = await POST(request);
 
-            expect(markNotificationsReadMock).toHaveBeenCalledWith(9, { ids: [1, 2] });
+            expect(markNotificationsReadInUserStateMock).toHaveBeenCalledWith('user-uuid', 9, { uuids: ['n-1', 'n-2'] });
             await expect(response.json()).resolves.toEqual({ ok: true });
         });
     });

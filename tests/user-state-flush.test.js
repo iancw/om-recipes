@@ -4,6 +4,7 @@ let getUserStateJsonMock;
 let clearUserStateDirtyMock;
 let listDirtyUserUuidsMock;
 let reconcileSavedRecipesForUserMock;
+let reconcileNotificationsForUserMock;
 
 vi.mock('../lib/user-state-store.js', () => ({
     getUserStateJson: (...args) => getUserStateJsonMock(...args)
@@ -20,24 +21,33 @@ vi.mock('../lib/recipe-saves.js', () => ({
     reconcileSavedRecipesForUser: (...args) => reconcileSavedRecipesForUserMock(...args)
 }));
 
+vi.mock('../lib/notifications.js', () => ({
+    reconcileNotificationsForUser: (...args) => reconcileNotificationsForUserMock(...args)
+}));
+
 describe('reconcileUserState', () => {
     beforeEach(() => {
         vi.resetModules();
         clearUserStateDirtyMock = vi.fn(() => Promise.resolve());
         reconcileSavedRecipesForUserMock = vi.fn(() => Promise.resolve());
+        reconcileNotificationsForUserMock = vi.fn(() => Promise.resolve());
     });
 
     it('reconciles the blob\'s saved ids into Postgres and clears the dirty marker when it is unchanged', async () => {
         const marker = { since: 100 };
         getUserStateJsonMock = vi.fn((key) => {
             if (key === 'pending/abc-uuid') return Promise.resolve(marker);
-            return Promise.resolve({ savedRecipeIds: [1, 2], userId: 20, hydratedAt: 1 });
+            return Promise.resolve({ savedRecipeIds: [1, 2], notifications: [{ dedupeKey: 'comment:1', readAt: null }], userId: 20, hydratedAt: 1 });
         });
         const { reconcileUserState } = await import('../lib/user-state-flush.js');
 
         await reconcileUserState('abc-uuid');
 
         expect(reconcileSavedRecipesForUserMock).toHaveBeenCalledWith({ userId: 20, desiredRecipeIds: [1, 2] });
+        expect(reconcileNotificationsForUserMock).toHaveBeenCalledWith({
+            userId: 20,
+            notifications: [{ dedupeKey: 'comment:1', readAt: null }]
+        });
         expect(clearUserStateDirtyMock).toHaveBeenCalledWith('abc-uuid');
     });
 
@@ -48,13 +58,14 @@ describe('reconcileUserState', () => {
                 pendingCallCount += 1;
                 return Promise.resolve(pendingCallCount === 1 ? { since: 100 } : { since: 200 });
             }
-            return Promise.resolve({ savedRecipeIds: [1, 2], userId: 20, hydratedAt: 1 });
+            return Promise.resolve({ savedRecipeIds: [1, 2], notifications: [], userId: 20, hydratedAt: 1 });
         });
         const { reconcileUserState } = await import('../lib/user-state-flush.js');
 
         await reconcileUserState('abc-uuid');
 
         expect(reconcileSavedRecipesForUserMock).toHaveBeenCalledWith({ userId: 20, desiredRecipeIds: [1, 2] });
+        expect(reconcileNotificationsForUserMock).toHaveBeenCalledWith({ userId: 20, notifications: [] });
         expect(clearUserStateDirtyMock).not.toHaveBeenCalled();
     });
 
@@ -101,6 +112,7 @@ describe('reconcileAllDirtyUserStates', () => {
         vi.resetModules();
         clearUserStateDirtyMock = vi.fn(() => Promise.resolve());
         reconcileSavedRecipesForUserMock = vi.fn(() => Promise.resolve());
+        reconcileNotificationsForUserMock = vi.fn(() => Promise.resolve());
     });
 
     it('reconciles every dirty user and reports a summary', async () => {

@@ -137,19 +137,21 @@ describe('notification writers', () => {
 
     describe('notifySampleImageAdded', () => {
         it('skips when the contributor is the owner (self-upload)', async () => {
-            selectMock = selectSequence([[{ authorId: 1, ownerUserId: 9 }]]);
+            selectMock = selectSequence([[{ authorId: 1, ownerUserId: 9, ownerUuid: 'owner-uuid' }]]);
             const rec = insertRecorder();
             insertMock = rec.insert;
 
             await notifySampleImageAdded(5, 100, 1);
 
             expect(rec.insert).not.toHaveBeenCalled();
+            expect(appendNotificationToUserStateMock).not.toHaveBeenCalled();
         });
 
-        it('inserts when a different author contributes a sample', async () => {
+        it('inserts and cache-appends when a different author contributes a sample', async () => {
             selectMock = selectSequence([
-                [{ authorId: 1, ownerUserId: 9 }],
-                [{ notifyNewRecipe: false, notifySampleImage: true, notifySave: true, emailDigestEnabled: true }]
+                [{ authorId: 1, ownerUserId: 9, ownerUuid: 'owner-uuid' }],
+                [{ notifyNewRecipe: false, notifySampleImage: true, notifySave: true, emailDigestEnabled: true }],
+                [{ name: 'Alex' }]
             ]);
             const rec = insertRecorder();
             insertMock = rec.insert;
@@ -166,14 +168,39 @@ describe('notification writers', () => {
                     dedupeKey: 'sample:100'
                 })
             );
+            expect(appendNotificationToUserStateMock).toHaveBeenCalledWith('owner-uuid', 9, {
+                type: 'sample_image_added',
+                recipeId: 5,
+                recipeSlug: 'golden-hour',
+                recipeName: 'Golden Hour',
+                actorAuthorName: 'Alex',
+                sampleImageId: 100,
+                dedupeKey: 'sample:100'
+            });
+        });
+
+        it('does not cache-append when the owner has no linked user account', async () => {
+            selectMock = selectSequence([
+                [{ authorId: 1, ownerUserId: 9, ownerUuid: null }],
+                [{ notifyNewRecipe: false, notifySampleImage: true, notifySave: true, emailDigestEnabled: true }]
+            ]);
+            const rec = insertRecorder();
+            insertMock = rec.insert;
+
+            await notifySampleImageAdded(5, 100, 2);
+
+            expect(rec.values).toHaveBeenCalled();
+            expect(appendNotificationToUserStateMock).not.toHaveBeenCalled();
         });
     });
 
     describe('notifyNewRecipe', () => {
         it('fans out to opted-in users, excluding the recipe author', async () => {
             selectMock = selectSequence([
-                [{ authorId: 1, ownerUserId: 9 }],
-                [{ userId: 9 }, { userId: 20 }, { userId: 21 }]
+                [{ authorId: 1, ownerUserId: 9, ownerUuid: 'owner-uuid' }],
+                [{ userId: 9 }, { userId: 20 }, { userId: 21 }],
+                [{ name: 'Sam' }],
+                [{ id: 20, uuid: 'uuid-20' }, { id: 21, uuid: 'uuid-21' }]
             ]);
             const rec = insertRecorder();
             insertMock = rec.insert;
@@ -184,16 +211,27 @@ describe('notification writers', () => {
                 expect.objectContaining({ recipientUserId: 20, dedupeKey: 'newrecipe:5:20' }),
                 expect.objectContaining({ recipientUserId: 21, dedupeKey: 'newrecipe:5:21' })
             ]);
+            expect(appendNotificationToUserStateMock).toHaveBeenCalledWith('uuid-20', 20, expect.objectContaining({
+                type: 'new_recipe',
+                dedupeKey: 'newrecipe:5:20',
+                actorAuthorName: 'Sam'
+            }));
+            expect(appendNotificationToUserStateMock).toHaveBeenCalledWith('uuid-21', 21, expect.objectContaining({
+                type: 'new_recipe',
+                dedupeKey: 'newrecipe:5:21',
+                actorAuthorName: 'Sam'
+            }));
         });
 
         it('does nothing when nobody is opted in', async () => {
-            selectMock = selectSequence([[{ authorId: 1, ownerUserId: 9 }], []]);
+            selectMock = selectSequence([[{ authorId: 1, ownerUserId: 9, ownerUuid: 'owner-uuid' }], []]);
             const rec = insertRecorder();
             insertMock = rec.insert;
 
             await notifyNewRecipe(5);
 
             expect(rec.insert).not.toHaveBeenCalled();
+            expect(appendNotificationToUserStateMock).not.toHaveBeenCalled();
         });
     });
 

@@ -11,12 +11,22 @@ vi.mock('../lib/auth.js', () => ({
     requireUser: (...args) => requireUserMock(...args)
 }));
 
-vi.mock('../lib/user-state-cache.js', () => ({
-    unreadNotificationCount: (notifications) =>
-        (notifications ?? []).filter((entry) => entry.readAt == null).length,
-    getUserSavedState: (...args) => getUserSavedStateMock(...args),
-    markNotificationsReadInUserState: (...args) => markNotificationsReadInUserStateMock(...args)
+vi.mock('../db/index.ts', () => ({
+    db: {}
 }));
+
+vi.mock('../lib/recipe-saves.js', () => ({
+    getAllSavedRecipeIdsForUser: vi.fn()
+}));
+
+vi.mock('../lib/user-state-cache.js', async () => {
+    const actual = await vi.importActual('../lib/user-state-cache.js');
+    return {
+        unreadNotificationCount: actual.unreadNotificationCount,
+        getUserSavedState: (...args) => getUserSavedStateMock(...args),
+        markNotificationsReadInUserState: (...args) => markNotificationsReadInUserStateMock(...args)
+    };
+});
 
 describe('notifications API routes', () => {
     beforeEach(async () => {

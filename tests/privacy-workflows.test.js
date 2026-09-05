@@ -14,6 +14,7 @@ let getObjectStorageClientFromEnvMock;
 let getObjectStorageNamespaceFromEnvMock;
 let getObjectMock;
 let revalidateRecipeDetailMock;
+let deleteUserStateKeyMock;
 
 let selectHandlers = [];
 let insertHandlers = [];
@@ -70,6 +71,15 @@ vi.mock('../lib/public-recipe-catalog-cache.js', () => ({
     revalidateRecipeDetail: (...args) => revalidateRecipeDetailMock(...args)
 }));
 
+vi.mock('../lib/user-state-store.js', () => ({
+    deleteUserStateKey: (...args) => deleteUserStateKeyMock(...args)
+}));
+
+vi.mock('../lib/user-state-cache.js', () => ({
+    stateKey: (uuid) => `state/users/${uuid}.json`,
+    pendingKey: (uuid) => `pending/${uuid}`
+}));
+
 describe('privacy workflows', () => {
     beforeEach(() => {
         vi.resetModules();
@@ -118,6 +128,7 @@ describe('privacy workflows', () => {
             value: Readable.from([Buffer.from('image-bytes')])
         }));
         revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
+        deleteUserStateKeyMock = vi.fn(async () => {});
     });
 
     it('creates and completes a privacy export request', async () => {
@@ -489,6 +500,8 @@ describe('privacy workflows', () => {
 
         expect(deleteImagesByIdsMock).toHaveBeenCalledWith([700, 701]);
         expect(deleteMock).toHaveBeenCalledTimes(7);
+        expect(deleteUserStateKeyMock).toHaveBeenCalledWith('state/users/user-uuid.json');
+        expect(deleteUserStateKeyMock).toHaveBeenCalledWith('pending/user-uuid');
         expect(updateMock).toHaveBeenCalledTimes(2);
         expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(501);
         expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(502);

@@ -10,7 +10,7 @@ import { upsertNotificationPreferences } from '../../lib/notifications.js';
 import { startAccountDeletion, startPrivacyExport } from '../../lib/privacy.js';
 import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../lib/public-recipe-catalog-cache.js';
 import { reconcileUserStateBestEffort } from '../../lib/user-state-flush.js';
-import { addAuthorIdToUserState } from '../../lib/user-state-cache.js';
+import { addAuthorIdToUserState, setUserStatePreferences } from '../../lib/user-state-cache.js';
 
 function normalizeOptionalUrl(v) {
     const s = String(v ?? '').trim();
@@ -68,13 +68,16 @@ export async function requestMyDataExportAction() {
 export async function updateMyNotificationPreferencesAction(formData) {
     const session = await requireUser();
 
-    await upsertNotificationPreferences(session.user.id, {
+    const preferences = {
         notifyNewRecipe: formData?.has('notifyNewRecipe'),
         notifySampleImage: formData?.has('notifySampleImage'),
         notifySave: formData?.has('notifySave'),
         notifyComment: formData?.has('notifyComment'),
         emailDigestEnabled: formData?.has('emailDigestEnabled')
-    });
+    };
+
+    await upsertNotificationPreferences(session.user.id, preferences);
+    await setUserStatePreferences(session.user.uuid, preferences);
 
     revalidatePath('/profile');
     await reconcileUserStateBestEffort(session.user.uuid);

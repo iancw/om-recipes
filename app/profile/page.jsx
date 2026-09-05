@@ -5,8 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from 'compo
 import { db } from '../../db/index.ts';
 import { authors, users } from '../../db/schema.ts';
 import { defaultDisplayNameFromEmail, getSession } from '../../lib/auth.js';
-import { getEffectivePreferences } from '../../lib/notifications.js';
 import { listPrivacyRequestsForUser, PRIVACY_REQUEST_STATUS_COMPLETED, PRIVACY_REQUEST_TYPE_EXPORT } from '../../lib/privacy.js';
+import { getUserSavedState } from '../../lib/user-state-cache.js';
 import { deleteMyAccountAction, requestMyDataExportAction, updateMyNotificationPreferencesAction, updateMyProfileAction } from './actions';
 import { NotificationPreferencesForm } from './notifications-form';
 import { ProfileForm } from './profile-form';
@@ -50,7 +50,8 @@ export default async function Page() {
         .limit(1);
 
     const privacyRequests = await listPrivacyRequestsForUser(user.id);
-    const notificationPreferences = await getEffectivePreferences(user.id);
+    const userState = await getUserSavedState(session.user.uuid, user.id);
+    const notificationPreferences = userState.preferences;
 
     return (
         <div className="w-full space-y-6">

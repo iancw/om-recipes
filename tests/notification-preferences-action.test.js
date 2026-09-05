@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 let upsertNotificationPreferencesMock;
 let revalidatePathMock;
 let reconcileUserStateBestEffortMock;
+let setUserStatePreferencesMock;
 let updateMyNotificationPreferencesAction;
 
 vi.mock('../lib/auth.js', () => ({
@@ -13,6 +14,11 @@ vi.mock('../lib/auth.js', () => ({
 
 vi.mock('../lib/user-state-flush.js', () => ({
     reconcileUserStateBestEffort: (...args) => reconcileUserStateBestEffortMock(...args)
+}));
+
+vi.mock('../lib/user-state-cache.js', () => ({
+    addAuthorIdToUserState: vi.fn(),
+    setUserStatePreferences: (...args) => setUserStatePreferencesMock(...args)
 }));
 
 vi.mock('../lib/notifications.js', () => ({
@@ -42,6 +48,7 @@ describe('updateMyNotificationPreferencesAction', () => {
         upsertNotificationPreferencesMock = vi.fn(() => Promise.resolve());
         revalidatePathMock = vi.fn();
         reconcileUserStateBestEffortMock = vi.fn(() => Promise.resolve());
+        setUserStatePreferencesMock = vi.fn(() => Promise.resolve());
         const mod = await import('../app/profile/actions.js');
         updateMyNotificationPreferencesAction = mod.updateMyNotificationPreferencesAction;
     });
@@ -60,6 +67,13 @@ describe('updateMyNotificationPreferencesAction', () => {
         await updateMyNotificationPreferencesAction(formData);
 
         expect(upsertNotificationPreferencesMock).toHaveBeenCalledWith(9, {
+            notifyNewRecipe: false,
+            notifySampleImage: true,
+            notifySave: false,
+            notifyComment: true,
+            emailDigestEnabled: true
+        });
+        expect(setUserStatePreferencesMock).toHaveBeenCalledWith('owner-uuid', {
             notifyNewRecipe: false,
             notifySampleImage: true,
             notifySave: false,

@@ -177,7 +177,10 @@ export async function generateMetadata({ params }) {
         || `${recipe.type === 'MONO' ? 'Monochrome' : 'Color'} recipe for OM System / Olympus cameras by ${recipe.authorName}.`;
 
     const primaryImage = recipe.sampleImages?.find((img) => img.isPrimary) ?? recipe.sampleImages?.[0] ?? null;
-    const ogImageUrl = primaryImage?.assetUrls?.original ?? null;
+    // Use the 1200px rendition, not the camera original: originals can run
+    // several MB and Facebook's link-preview scraper silently drops images
+    // over its ~8MB fetch limit, leaving a blank preview box.
+    const ogImageUrl = primaryImage?.assetUrls?.['1200'] ?? primaryImage?.assetUrls?.original ?? null;
 
     return {
         title,

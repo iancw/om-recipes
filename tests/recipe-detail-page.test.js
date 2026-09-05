@@ -462,7 +462,7 @@ describe('recipe detail page redirects', () => {
 
         expect(metadata.openGraph.images).toEqual([
             {
-                url: 'https://images.om-recipes.com/authors/a/recipes/r/sample.jpg'
+                url: 'https://images.om-recipes.com/1200/authors/a/recipes/r/sample.jpg'
             }
         ]);
     });

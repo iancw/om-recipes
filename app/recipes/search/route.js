@@ -1,6 +1,6 @@
 import { getSession } from '../../../lib/auth.js';
 import { getRecipeIndex } from '../../../lib/public-recipe-catalog.js';
-import { getSavedRecipeIdsForUser } from '../../../lib/recipe-saves.js';
+import { getUserSavedState } from '../../../lib/user-state-cache.js';
 import { normalizeRecipeTypeFilter, RECIPE_TYPE_FILTER_VALUES } from '../../../lib/recipe-data.js';
 import { normalizeRecipeSort, RECIPE_SORT_VALUES } from '../../../lib/recipe-sort.js';
 
@@ -65,24 +65,24 @@ export async function GET(request) {
         filtered = filtered.filter((recipe) => recipe.authorUserId === userId);
     }
 
+    let savedRecipeIdSet = null;
+    if (userId != null && session?.user?.uuid) {
+        const savedState = await getUserSavedState(session.user.uuid, userId);
+        savedRecipeIdSet = new Set(savedState.savedRecipeIds);
+    }
     if (onlySaved) {
-        const savedRecipeIds = await getSavedRecipeIdsForUser({ userId, recipeIds: filtered.map((r) => r.id) });
-        filtered = filtered.filter((recipe) => savedRecipeIds.has(recipe.id));
+        filtered = filtered.filter((recipe) => savedRecipeIdSet?.has(recipe.id));
     }
 
     const sorted = sortRecipes(filtered, input.sortBy);
     const page = sorted.slice(input.offset, input.offset + input.limit);
     const hasMore = input.offset + input.limit < sorted.length;
 
-    // No per-card saved-status lookup on the default/mine views: every result
-    // under the "saved" filter is saved by construction, and outside that
-    // filter we'd rather show no badge than pay a DB query on every default
-    // page load.
     return Response.json({
         results: page.map(({ authorUserId, aliases, saveCount, authorId, createdAtMs, ...card }) => ({
             ...card,
             viewerIsLoggedIn: userId != null,
-            isSaved: onlySaved
+            isSaved: savedRecipeIdSet?.has(card.id) ?? false
         })),
         hasMore,
         nextOffset: input.offset + page.length

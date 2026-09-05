@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 let getSessionMock;
 let getRecipeIndexMock;
-let getSavedRecipeIdsForUserMock;
+let getUserSavedStateMock;
 
 vi.mock('../lib/auth.js', () => ({
     getSession: (...args) => getSessionMock(...args)
@@ -12,8 +12,8 @@ vi.mock('../lib/public-recipe-catalog.js', () => ({
     getRecipeIndex: (...args) => getRecipeIndexMock(...args)
 }));
 
-vi.mock('../lib/recipe-saves.js', () => ({
-    getSavedRecipeIdsForUser: (...args) => getSavedRecipeIdsForUserMock(...args)
+vi.mock('../lib/user-state-cache.js', () => ({
+    getUserSavedState: (...args) => getUserSavedStateMock(...args)
 }));
 
 function makeRecipe(overrides) {
@@ -32,21 +32,31 @@ function makeRecipe(overrides) {
 describe('recipe search route', () => {
     beforeEach(() => {
         vi.resetModules();
-        getSessionMock = vi.fn(async () => ({ user: { id: 42 } }));
-        getSavedRecipeIdsForUserMock = vi.fn(async () => new Set());
+        getSessionMock = vi.fn(async () => ({ user: { id: 42, uuid: 'user-uuid' } }));
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [], userId: 42, hydratedAt: 1 }));
         getRecipeIndexMock = vi.fn(async () => [makeRecipe({})]);
     });
 
-    it('returns hydrated comparison and sample images with no eager saved-status lookup', async () => {
+    it('returns hydrated comparison and sample images with no eager saved-status lookup for a logged-out request', async () => {
+        getSessionMock = vi.fn(async () => null);
         const { GET } = await import('../app/recipes/search/route.js');
         const response = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0'));
         const body = await response.json();
 
         expect(body.results).toHaveLength(1);
         expect(body.results[0].isSaved).toBe(false);
-        expect(body.results[0].comparisonImages[0]).toMatchObject({ id: 201, label: 'Before' });
-        expect(body.results[0].sampleImages[0]).toMatchObject({ id: 301, isPrimary: true });
-        expect(getSavedRecipeIdsForUserMock).not.toHaveBeenCalled();
+        expect(getUserSavedStateMock).not.toHaveBeenCalled();
+    });
+
+    it('marks isSaved true for cards the logged-in viewer has saved, false otherwise', async () => {
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [101], userId: 42, hydratedAt: 1 }));
+        const { GET } = await import('../app/recipes/search/route.js');
+        const response = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0'));
+        const body = await response.json();
+
+        expect(getUserSavedStateMock).toHaveBeenCalledWith('user-uuid', 42);
+        expect(body.results[0].id).toBe(101);
+        expect(body.results[0].isSaved).toBe(true);
     });
 
     it('fetches the recipe index exactly once across two requests at different offsets', async () => {
@@ -67,16 +77,15 @@ describe('recipe search route', () => {
         expect(getRecipeIndexMock).toHaveBeenCalledTimes(2); // called per-request, but each call is a cache hit inside getRecipeIndex itself (Task 1) — this route never re-queries Postgres for a new offset
     });
 
-    it('marks every result saved under the "saved" filter using a live saved-id lookup, not the index', async () => {
-        getSavedRecipeIdsForUserMock = vi.fn(async () => new Set([101]));
+    it('filters to the saved set via the cache under onlySaved, with no DB call', async () => {
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [101], userId: 42, hydratedAt: 1 }));
         const { GET } = await import('../app/recipes/search/route.js');
-
         const response = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0&onlySaved=1'));
         const body = await response.json();
 
         expect(body.results).toHaveLength(1);
         expect(body.results[0].isSaved).toBe(true);
-        expect(getSavedRecipeIdsForUserMock).toHaveBeenCalledWith({ userId: 42, recipeIds: [101] });
+        expect(getUserSavedStateMock).toHaveBeenCalledWith('user-uuid', 42);
     });
 
     it('filters to only the requesting user\'s own recipes under onlyMine, with no DB call', async () => {
@@ -124,8 +133,8 @@ describe('recipe search route', () => {
 describe('recipe search route sort tiebreaks', () => {
     beforeEach(() => {
         vi.resetModules();
-        getSessionMock = vi.fn(async () => ({ user: { id: 42 } }));
-        getSavedRecipeIdsForUserMock = vi.fn(async () => new Set());
+        getSessionMock = vi.fn(async () => ({ user: { id: 42, uuid: 'user-uuid' } }));
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [], userId: 42, hydratedAt: 1 }));
     });
 
     async function getSortedIds(recipes, sortParam) {

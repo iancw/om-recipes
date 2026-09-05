@@ -10,6 +10,7 @@ import { upsertNotificationPreferences } from '../../lib/notifications.js';
 import { startAccountDeletion, startPrivacyExport } from '../../lib/privacy.js';
 import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../lib/public-recipe-catalog-cache.js';
 import { reconcileUserStateBestEffort } from '../../lib/user-state-flush.js';
+import { addAuthorIdToUserState } from '../../lib/user-state-cache.js';
 
 function normalizeOptionalUrl(v) {
     const s = String(v ?? '').trim();
@@ -33,6 +34,7 @@ export async function updateMyProfileAction(formData) {
         userId: session.user.id,
         displayName: name
     });
+    await addAuthorIdToUserState(session.user.uuid, author.id);
 
     await db
         .update(authors)

@@ -3,9 +3,6 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '../../../lib/auth.js';
 import { getUserSavedState } from '../../../lib/user-state-cache.js';
-import { db } from '../../../db/index.ts';
-import { authors } from '../../../db/schema.ts';
-import { eq } from 'drizzle-orm';
 import RecipeCard from '../../../components/recipe-card.jsx';
 import SampleGallery from '../../../components/SampleGallery.jsx';
 import CommentsSection from '../../../components/CommentsSection.jsx';
@@ -78,17 +75,6 @@ export async function generateMetadata({ params }) {
     };
 }
 
-async function getAuthedAuthorIds(userId = null) {
-    if (userId == null) return [];
-
-    const rows = await db
-        .select({ id: authors.id })
-        .from(authors)
-        .where(eq(authors.userId, userId));
-
-    return rows.map((row) => row.id);
-}
-
 export default async function Page({ params }) {
     // Next.js 16+ passes `params` as a Promise in some runtimes.
     // https://nextjs.org/docs/messages/sync-dynamic-apis
@@ -102,15 +88,16 @@ export default async function Page({ params }) {
     if (recipe.slug && id && id !== recipe.slug) {
         permanentRedirect(getRecipePath(recipe));
     }
+    let authorIds = [];
     if (session?.user?.uuid) {
-        const savedState = await getUserSavedState(session.user.uuid, userId);
-        recipe.isSaved = savedState.savedRecipeIds.includes(recipe.id);
+        const userState = await getUserSavedState(session.user.uuid, userId);
+        recipe.isSaved = userState.savedRecipeIds.includes(recipe.id);
+        authorIds = userState.authorIds ?? [];
     }
     const whiteBalance = getEquivalentWhiteBalance(recipe);
     const relatedWhiteBalanceRecipes = await findRelatedWhiteBalanceRecipes(recipe.id, whiteBalance, recipe.type);
 
-    const authedAuthorIds = await getAuthedAuthorIds(userId);
-    const isOwner = authedAuthorIds.includes(recipe.authorId);
+    const isOwner = authorIds.includes(recipe.authorId);
     const saveCount = isOwner ? await getSaveCountForRecipe(recipe.id) : null;
     const recipeComments = recipe.comments ?? [];
 
@@ -146,7 +133,7 @@ export default async function Page({ params }) {
                 recipePath={getRecipePath(recipe)}
                 comments={recipeComments}
                 isLoggedIn={Boolean(userId)}
-                viewerAuthorIds={authedAuthorIds}
+                viewerAuthorIds={authorIds}
                 recipeAuthorId={recipe.authorId}
                 addCommentAction={addCommentAction}
                 deleteCommentAction={deleteCommentAction}

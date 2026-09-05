@@ -10,6 +10,7 @@ let deleteCommentMock;
 let notifyRecipeCommentedMock;
 let findOrCreateAuthorForUserMock;
 let reconcileUserStateBestEffortMock;
+let addAuthorIdToUserStateMock;
 
 vi.mock('../lib/auth.js', () => ({
     requireUser: () => Promise.resolve({ user: { id: 9, uuid: 'commenter-uuid' } }),
@@ -18,6 +19,10 @@ vi.mock('../lib/auth.js', () => ({
 
 vi.mock('../lib/user-state-flush.js', () => ({
     reconcileUserStateBestEffort: (...args) => reconcileUserStateBestEffortMock(...args)
+}));
+
+vi.mock('../lib/user-state-cache.js', () => ({
+    addAuthorIdToUserState: (...args) => addAuthorIdToUserStateMock(...args)
 }));
 
 vi.mock('../lib/comments.js', () => ({
@@ -53,6 +58,7 @@ describe('addCommentAction', () => {
         findOrCreateAuthorForUserMock = vi.fn(() => Promise.resolve({ id: 2, uuid: 'author-uuid', name: 'Commenter' }));
         revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
         reconcileUserStateBestEffortMock = vi.fn(() => Promise.resolve());
+        addAuthorIdToUserStateMock = vi.fn(() => Promise.resolve());
 
         const recipeSelectResponses = [
             [{ id: 123, uuid: 'recipe-uuid', slug: 'recipe-slug' }],
@@ -81,6 +87,7 @@ describe('addCommentAction', () => {
 
         expect(result).toEqual({ ok: true });
         expect(findOrCreateAuthorForUserMock).toHaveBeenCalledWith({ userId: 9, email: 'user@example.com' });
+        expect(addAuthorIdToUserStateMock).toHaveBeenCalledWith('commenter-uuid', 2);
         expect(addCommentMock).toHaveBeenCalledWith({ recipeId: 123, authorId: 2, body: 'Nice recipe!' });
         expect(notifyRecipeCommentedMock).toHaveBeenCalledWith(123, 55, 2);
         expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(123);

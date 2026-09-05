@@ -5,6 +5,7 @@ let setUserStateJsonMock;
 let deleteUserStateKeyMock;
 let listUserStateKeysMock;
 let getAllSavedRecipeIdsForUserMock;
+let authorSelectMock;
 
 vi.mock('../lib/user-state-store.js', () => ({
     getUserStateJson: (...args) => getUserStateJsonMock(...args),
@@ -15,6 +16,10 @@ vi.mock('../lib/user-state-store.js', () => ({
 
 vi.mock('../lib/recipe-saves.js', () => ({
     getAllSavedRecipeIdsForUser: (...args) => getAllSavedRecipeIdsForUserMock(...args)
+}));
+
+vi.mock('../db/index.ts', () => ({
+    db: { select: (...args) => authorSelectMock(...args) }
 }));
 
 describe('stateKey / pendingKey', () => {
@@ -31,16 +36,21 @@ describe('getUserSavedState', () => {
         getUserStateJsonMock = vi.fn();
         setUserStateJsonMock = vi.fn(() => Promise.resolve());
         getAllSavedRecipeIdsForUserMock = vi.fn(() => Promise.resolve(new Set([1, 2])));
+        authorSelectMock = vi.fn(() => ({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn(() => Promise.resolve([{ id: 7 }]))
+        }));
     });
 
     it('returns the cached blob without hydrating when one already exists', async () => {
-        getUserStateJsonMock.mockResolvedValue({ savedRecipeIds: [3], userId: 20, hydratedAt: 111 });
+        getUserStateJsonMock.mockResolvedValue({ savedRecipeIds: [3], authorIds: [7], userId: 20, hydratedAt: 111 });
         const { getUserSavedState } = await import('../lib/user-state-cache.js');
 
         const result = await getUserSavedState('abc-uuid', 20);
 
-        expect(result).toEqual({ savedRecipeIds: [3], userId: 20, hydratedAt: 111 });
+        expect(result).toEqual({ savedRecipeIds: [3], authorIds: [7], userId: 20, hydratedAt: 111 });
         expect(getAllSavedRecipeIdsForUserMock).not.toHaveBeenCalled();
+        expect(authorSelectMock).not.toHaveBeenCalled();
         expect(setUserStateJsonMock).not.toHaveBeenCalled();
     });
 
@@ -51,10 +61,46 @@ describe('getUserSavedState', () => {
         const result = await getUserSavedState('abc-uuid', 20);
 
         expect(getAllSavedRecipeIdsForUserMock).toHaveBeenCalledWith(20);
+        expect(authorSelectMock).toHaveBeenCalled();
         expect(result.savedRecipeIds.sort()).toEqual([1, 2]);
+        expect(result.authorIds).toEqual([7]);
         expect(result.userId).toBe(20);
         expect(typeof result.hydratedAt).toBe('number');
-        expect(setUserStateJsonMock).toHaveBeenCalledWith('state/users/abc-uuid.json', expect.objectContaining({ userId: 20 }));
+        expect(setUserStateJsonMock).toHaveBeenCalledWith('state/users/abc-uuid.json', expect.objectContaining({ userId: 20, authorIds: [7] }));
+    });
+});
+
+describe('addAuthorIdToUserState', () => {
+    beforeEach(() => {
+        vi.resetModules();
+        setUserStateJsonMock = vi.fn(() => Promise.resolve());
+    });
+
+    it('does nothing when the user has no cached blob yet', async () => {
+        getUserStateJsonMock = vi.fn().mockResolvedValue(null);
+        const { addAuthorIdToUserState } = await import('../lib/user-state-cache.js');
+
+        await addAuthorIdToUserState('abc-uuid', 7);
+
+        expect(setUserStateJsonMock).not.toHaveBeenCalled();
+    });
+
+    it('appends a new author id to an existing blob', async () => {
+        getUserStateJsonMock = vi.fn().mockResolvedValue({ savedRecipeIds: [], authorIds: [], userId: 20, hydratedAt: 1 });
+        const { addAuthorIdToUserState } = await import('../lib/user-state-cache.js');
+
+        await addAuthorIdToUserState('abc-uuid', 7);
+
+        expect(setUserStateJsonMock).toHaveBeenCalledWith('state/users/abc-uuid.json', expect.objectContaining({ authorIds: [7] }));
+    });
+
+    it('is a no-op when the author id is already cached', async () => {
+        getUserStateJsonMock = vi.fn().mockResolvedValue({ savedRecipeIds: [], authorIds: [7], userId: 20, hydratedAt: 1 });
+        const { addAuthorIdToUserState } = await import('../lib/user-state-cache.js');
+
+        await addAuthorIdToUserState('abc-uuid', 7);
+
+        expect(setUserStateJsonMock).not.toHaveBeenCalled();
     });
 });
 

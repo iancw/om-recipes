@@ -41,6 +41,7 @@ import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../lib
 import { notifyNewRecipe, notifySampleImageAdded } from '../../lib/notifications.js';
 import { toStoredCameraMetadataText } from '../../lib/exif-reprocess.js';
 import { reconcileUserStateBestEffort } from '../../lib/user-state-flush.js';
+import { addAuthorIdToUserState } from '../../lib/user-state-cache.js';
 
 const ORIGINAL_BUCKET = process.env.OCI_IMAGES_ORIGINAL_BUCKET;
 const RESIZED_BUCKET = process.env.OCI_IMAGES_PROCESSED_BUCKET;
@@ -678,6 +679,7 @@ export async function prepareRecipeUploadAction({ parameters }) {
         });
         const authorId = authorRow.id;
         const authorUuid = authorRow.uuid;
+        await addAuthorIdToUserState(session.user.uuid, authorId);
 
         const fingerprints = typeConfig.computeFingerprints(recipeSettings);
         const recipeFingerprint = fingerprints.recipeFingerprint;

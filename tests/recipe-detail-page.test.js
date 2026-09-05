@@ -27,7 +27,7 @@ vi.mock('../lib/recipe-detail-cache.js', () => ({
 }));
 
 vi.mock('../db/index.ts', () => ({
-    db: { select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }) } // only getAuthedAuthorIds uses this now
+    db: { select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }) }
 }));
 
 vi.mock('next/navigation', () => ({
@@ -187,6 +187,27 @@ describe('recipe detail page redirects', () => {
 
         expect(getUserSavedStateMock).not.toHaveBeenCalled();
         expect(capturedRecipeCardProps.recipe.isSaved).toBe(false);
+        expect(capturedRecipeCardProps.isOwner).toBe(false);
+    });
+
+    it('marks the viewer as owner when their cached author ids include the recipe author', async () => {
+        getSessionMock = vi.fn(async () => ({ user: { id: 42, uuid: 'user-uuid' } }));
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [], authorIds: [9], userId: 42, hydratedAt: 1 }));
+
+        const mod = await import('../app/recipes/[id]/page.jsx');
+        await mod.default({ params: Promise.resolve({ id: 'portra-400' }) });
+
+        expect(capturedRecipeCardProps.isOwner).toBe(true);
+    });
+
+    it('does not mark the viewer as owner when their cached author ids exclude the recipe author', async () => {
+        getSessionMock = vi.fn(async () => ({ user: { id: 42, uuid: 'user-uuid' } }));
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [], authorIds: [999], userId: 42, hydratedAt: 1 }));
+
+        const mod = await import('../app/recipes/[id]/page.jsx');
+        await mod.default({ params: Promise.resolve({ id: 'portra-400' }) });
+
+        expect(capturedRecipeCardProps.isOwner).toBe(false);
     });
 
     it('resolves the id/slug/alias via the cached recipe index, not a live query', async () => {

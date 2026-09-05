@@ -6,12 +6,17 @@ let revalidatePathMock;
 let revalidateCatalogMock;
 let revalidateRecipeDetailMock;
 let findOrCreateAuthorForUserMock;
+let addAuthorIdToUserStateMock;
 let updateMyProfileAction;
 
 vi.mock('../lib/auth.js', () => ({
-    requireUser: () => Promise.resolve({ user: { id: 9, email: 'owner@example.com' } }),
+    requireUser: () => Promise.resolve({ user: { id: 9, uuid: 'owner-uuid', email: 'owner@example.com' } }),
     findOrCreateAuthorForUser: (...args) => findOrCreateAuthorForUserMock(...args),
     clearSessionCookie: vi.fn()
+}));
+
+vi.mock('../lib/user-state-cache.js', () => ({
+    addAuthorIdToUserState: (...args) => addAuthorIdToUserStateMock(...args)
 }));
 
 vi.mock('../lib/notifications.js', () => ({ upsertNotificationPreferences: vi.fn() }));
@@ -52,6 +57,7 @@ describe('updateMyProfileAction', () => {
         revalidateCatalogMock = vi.fn(() => Promise.resolve());
         revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
         findOrCreateAuthorForUserMock = vi.fn(() => Promise.resolve({ id: 77 }));
+        addAuthorIdToUserStateMock = vi.fn(() => Promise.resolve());
 
         selectMock = vi.fn(() => ({
             from: vi.fn().mockReturnThis(),
@@ -70,6 +76,7 @@ describe('updateMyProfileAction', () => {
     it('busts the catalog cache and every one of the author\'s recipe-detail caches', async () => {
         await updateMyProfileAction(makeFormData({ name: 'New Name' }));
 
+        expect(addAuthorIdToUserStateMock).toHaveBeenCalledWith('owner-uuid', 77);
         expect(revalidateCatalogMock).toHaveBeenCalledTimes(1);
         expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(501);
         expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(502);

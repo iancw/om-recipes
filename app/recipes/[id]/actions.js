@@ -17,7 +17,7 @@ import { redirect } from 'next/navigation';
 import { findOrCreateAuthorForUser, requireUser } from '../../../lib/auth.js';
 import { getRecipePath } from '../../../lib/recipe-url.js';
 import { applySlugChange, computeSlugBase, resolveUniqueSlug } from '../../../lib/recipe-slug.js';
-import { revalidatePublicRecipeCatalog } from '../../../lib/public-recipe-catalog-cache.js';
+import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../../lib/public-recipe-catalog-cache.js';
 import { addComment, deleteComment } from '../../../lib/comments.js';
 import { notifyRecipeCommented } from '../../../lib/notifications.js';
 
@@ -253,7 +253,10 @@ export async function updateRecipeAction(formData) {
     const newSlug = await resolveUniqueSlug({ base, recipeId });
     const slugResult = await applySlugChange({ recipeId, oldSlug, newSlug });
 
-    if (r) await revalidatePublicRecipeCatalog();
+    if (r) {
+        await revalidatePublicRecipeCatalog();
+        await revalidateRecipeDetail(recipeId);
+    }
     revalidatePath(getRecipePath({ slug: oldSlug }));
     if (slugResult.changed) {
         revalidatePath(getRecipePath({ slug: slugResult.newSlug }));
@@ -314,7 +317,10 @@ export async function deleteMyRecipeAction(formData) {
         await deleteOrphanedImagesByIds(associatedImageIds);
     }
 
-    if (deleted.length > 0) await revalidatePublicRecipeCatalog();
+    if (deleted.length > 0) {
+        await revalidatePublicRecipeCatalog();
+        await revalidateRecipeDetail(recipeId);
+    }
     revalidatePath('/');
     redirect('/');
 }
@@ -354,6 +360,7 @@ export async function deleteRecipeSampleImageAction({ recipeId, imageId }) {
     await deleteOrphanedImagesByIds([parsedImageId]);
 
     await revalidatePublicRecipeCatalog();
+    await revalidateRecipeDetail(parsedRecipeId);
     const recipe = recipeRows[0];
     revalidatePath(getRecipePath(recipe));
     revalidatePath('/');
@@ -403,6 +410,7 @@ export async function setPrimaryRecipeSampleImageAction({ recipeId, imageId }) {
         .where(and(eq(recipeSampleImages.recipeId, parsedRecipeId), eq(recipeSampleImages.imageId, parsedImageId)));
 
     await revalidatePublicRecipeCatalog();
+    await revalidateRecipeDetail(parsedRecipeId);
     const recipe = recipeRows[0];
     revalidatePath(getRecipePath(recipe));
     revalidatePath('/');
@@ -449,6 +457,7 @@ export async function addCommentAction({ recipeId, body }) {
 
     await notifyRecipeCommented(parsedRecipeId, comment.id, author.id);
 
+    await revalidateRecipeDetail(parsedRecipeId);
     revalidatePath(getRecipePath(recipe));
 
     return { ok: true };
@@ -484,5 +493,6 @@ export async function deleteCommentAction({ recipeId, commentId }) {
 
     await deleteComment({ commentId: parsedCommentId, requestingAuthorIds, recipeAuthorId: recipe.authorId });
 
+    await revalidateRecipeDetail(parsedRecipeId);
     revalidatePath(getRecipePath(recipe));
 }

@@ -1,14 +1,14 @@
 'use server';
 
 import { db } from '../../db/index.ts';
-import { authors } from '../../db/schema.ts';
+import { authors, recipes } from '../../db/schema.ts';
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { clearSessionCookie, findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
 import { upsertNotificationPreferences } from '../../lib/notifications.js';
 import { startAccountDeletion, startPrivacyExport } from '../../lib/privacy.js';
-import { revalidatePublicRecipeCatalog } from '../../lib/public-recipe-catalog-cache.js';
+import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../lib/public-recipe-catalog-cache.js';
 
 function normalizeOptionalUrl(v) {
     const s = String(v ?? '').trim();
@@ -46,6 +46,8 @@ export async function updateMyProfileAction(formData) {
         .where(eq(authors.id, author.id));
 
     await revalidatePublicRecipeCatalog();
+    const authoredRecipeRows = await db.select({ id: recipes.id }).from(recipes).where(eq(recipes.authorId, author.id));
+    await Promise.all(authoredRecipeRows.map((row) => revalidateRecipeDetail(row.id)));
     revalidatePath('/profile');
 }
 

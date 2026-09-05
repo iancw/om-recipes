@@ -23,8 +23,10 @@ vi.mock('../lib/oci/objectStorage.js', () => ({
     deleteObject: vi.fn()
 }));
 
+let revalidateRecipeDetailMock;
 vi.mock('../lib/public-recipe-catalog-cache.js', () => ({
-    revalidatePublicRecipeCatalog: vi.fn(() => Promise.resolve())
+    revalidatePublicRecipeCatalog: vi.fn(() => Promise.resolve()),
+    revalidateRecipeDetail: (...args) => revalidateRecipeDetailMock(...args)
 }));
 
 vi.mock('../db/index.ts', () => ({
@@ -39,6 +41,7 @@ describe('finalizeRecipeUploadAction notifies on sample image add', () => {
     beforeEach(async () => {
         vi.resetModules();
         notifySampleImageAddedMock = vi.fn(() => Promise.resolve());
+        revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
 
         // First select: the image + author join lookup inside finalizeRecipeUploadAction.
         selectMock = vi.fn(() => ({
@@ -81,5 +84,6 @@ describe('finalizeRecipeUploadAction notifies on sample image add', () => {
         await finalizeRecipeUploadAction({ parameters: { imageId: 100, originalFileSize: 100 } });
 
         expect(notifySampleImageAddedMock).toHaveBeenCalledWith(5, 100, 2);
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(5);
     });
 });

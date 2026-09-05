@@ -20,7 +20,6 @@ function describeNotification(item) {
 export default function NotificationBell() {
     const [open, setOpen] = useState(false);
     const [loaded, setLoaded] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
     const [items, setItems] = useState([]);
     const containerRef = useRef(null);
 
@@ -30,24 +29,12 @@ export default function NotificationBell() {
             if (!response.ok) return null;
             const data = await response.json();
             setItems(data.items ?? []);
-            setUnreadCount(data.unreadCount ?? 0);
             setLoaded(true);
             return data;
         } catch {
             return null;
         }
     }, []);
-
-    useEffect(() => {
-        const timeoutId = setTimeout(() => {
-            void refresh();
-        }, 0);
-        const interval = setInterval(refresh, 60000);
-        return () => {
-            clearTimeout(timeoutId);
-            clearInterval(interval);
-        };
-    }, [refresh]);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -62,6 +49,10 @@ export default function NotificationBell() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [open]);
 
+    // Fully on-demand: no fetch on mount, no background polling. This bell
+    // no longer shows an unread badge without being opened — any proactive
+    // check would mean a DB query on every page view for every logged-in
+    // user, which is exactly what keeps Neon's compute from ever sleeping.
     const handleToggle = async () => {
         const next = !open;
         setOpen(next);
@@ -69,7 +60,6 @@ export default function NotificationBell() {
 
         const data = await refresh();
         if (data && data.unreadCount > 0) {
-            setUnreadCount(0);
             fetch('/api/notifications/read', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
@@ -96,11 +86,6 @@ export default function NotificationBell() {
                     />
                     <path d="M8 15.5a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
-                {unreadCount > 0 ? (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
-                ) : null}
             </button>
 
             {open ? (

@@ -24,6 +24,11 @@ vi.mock('../lib/notifications.js', () => ({
     notifyRecipeCommented: (...args) => notifyRecipeCommentedMock(...args)
 }));
 
+let revalidateRecipeDetailMock;
+vi.mock('../lib/public-recipe-catalog-cache.js', () => ({
+    revalidateRecipeDetail: (...args) => revalidateRecipeDetailMock(...args)
+}));
+
 vi.mock('../db/index.ts', () => ({
     db: {
         select: (...args) => selectMock(...args)
@@ -41,6 +46,7 @@ describe('addCommentAction', () => {
         addCommentMock = vi.fn(() => Promise.resolve({ id: 55, uuid: 'comment-uuid', createdAt: new Date('2026-08-26') }));
         notifyRecipeCommentedMock = vi.fn(() => Promise.resolve());
         findOrCreateAuthorForUserMock = vi.fn(() => Promise.resolve({ id: 2, uuid: 'author-uuid', name: 'Commenter' }));
+        revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
 
         const recipeSelectResponses = [
             [{ id: 123, uuid: 'recipe-uuid', slug: 'recipe-slug' }],
@@ -71,6 +77,7 @@ describe('addCommentAction', () => {
         expect(findOrCreateAuthorForUserMock).toHaveBeenCalledWith({ userId: 9, email: 'user@example.com' });
         expect(addCommentMock).toHaveBeenCalledWith({ recipeId: 123, authorId: 2, body: 'Nice recipe!' });
         expect(notifyRecipeCommentedMock).toHaveBeenCalledWith(123, 55, 2);
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(123);
         expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/recipe-slug');
     });
 
@@ -125,6 +132,7 @@ describe('deleteCommentAction', () => {
         vi.resetModules();
         revalidatePathMock = vi.fn();
         deleteCommentMock = vi.fn(() => Promise.resolve());
+        revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
 
         // Chain must support BOTH `.where().limit(1)` (recipe lookup, comment lookup)
         // and a bare `.where()` awaited directly (author lookup, no .limit call) —
@@ -156,6 +164,7 @@ describe('deleteCommentAction', () => {
         await deleteCommentAction({ recipeId: 123, commentId: 55 });
 
         expect(deleteCommentMock).toHaveBeenCalledWith({ commentId: 55, requestingAuthorIds: [2], recipeAuthorId: 1 });
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(123);
         expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/recipe-slug');
     });
 

@@ -13,6 +13,7 @@ let getMissingObjectStorageEnvVarsMock;
 let getObjectStorageClientFromEnvMock;
 let getObjectStorageNamespaceFromEnvMock;
 let getObjectMock;
+let revalidateRecipeDetailMock;
 
 let selectHandlers = [];
 let insertHandlers = [];
@@ -64,6 +65,11 @@ vi.mock('../lib/comments.js', () => ({
     getCommentsPostedByAuthors: vi.fn(async () => [])
 }));
 
+vi.mock('../lib/public-recipe-catalog-cache.js', () => ({
+    revalidatePublicRecipeCatalog: vi.fn(() => Promise.resolve()),
+    revalidateRecipeDetail: (...args) => revalidateRecipeDetailMock(...args)
+}));
+
 describe('privacy workflows', () => {
     beforeEach(() => {
         vi.resetModules();
@@ -111,6 +117,7 @@ describe('privacy workflows', () => {
         getObjectMock = vi.fn(async () => ({
             value: Readable.from([Buffer.from('image-bytes')])
         }));
+        revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
     });
 
     it('creates and completes a privacy export request', async () => {
@@ -468,7 +475,7 @@ describe('privacy workflows', () => {
         deleteHandlers.push(
             () => ({ where: vi.fn(() => Promise.resolve()) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
-            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve([{ id: 501 }, { id: 502 }])) })) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
@@ -483,6 +490,8 @@ describe('privacy workflows', () => {
         expect(deleteImagesByIdsMock).toHaveBeenCalledWith([700, 701]);
         expect(deleteMock).toHaveBeenCalledTimes(7);
         expect(updateMock).toHaveBeenCalledTimes(2);
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(501);
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(502);
     });
 
     it('clears expired export artifacts and abandoned uploads during retention cleanup', async () => {

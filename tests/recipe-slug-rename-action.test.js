@@ -12,8 +12,10 @@ vi.mock('../lib/auth.js', () => ({
     requireUser: () => Promise.resolve({ user: { id: 9, email: 'user@example.com' } }),
     findOrCreateAuthorForUser: vi.fn()
 }));
+let revalidateRecipeDetailMock;
 vi.mock('../lib/public-recipe-catalog-cache.js', () => ({
-    revalidatePublicRecipeCatalog: (...a) => revalidateCatalogMock(...a)
+    revalidatePublicRecipeCatalog: (...a) => revalidateCatalogMock(...a),
+    revalidateRecipeDetail: (...a) => revalidateRecipeDetailMock(...a)
 }));
 vi.mock('../lib/comments.js', () => ({ addComment: vi.fn(), deleteComment: vi.fn() }));
 vi.mock('../lib/notifications.js', () => ({ notifyRecipeCommented: vi.fn() }));
@@ -53,6 +55,7 @@ describe('updateRecipeAction slug recompute', () => {
         vi.resetModules();
         revalidatePathMock = vi.fn();
         revalidateCatalogMock = vi.fn(() => Promise.resolve());
+        revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
         resolveUniqueSlugMock = vi.fn(({ base }) => Promise.resolve(base));
         applySlugChangeMock = vi.fn(({ oldSlug, newSlug }) =>
             Promise.resolve({ changed: oldSlug !== newSlug, newSlug })
@@ -106,6 +109,7 @@ describe('updateRecipeAction slug recompute', () => {
         });
         expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/jane_old-name');
         expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/jane_new-name');
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(123);
     });
 
     it('does not revalidate a second path when the slug is unchanged', async () => {

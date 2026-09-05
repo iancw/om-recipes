@@ -10,3 +10,6 @@
 # the whole graph (TypeScript included) into one file and avoids both problems.
 [functions."notification-digest"]
   node_bundler = "esbuild"
+
+[functions."state-cache-flush"]
+  node_bundler = "esbuild"

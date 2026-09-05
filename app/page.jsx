@@ -107,7 +107,7 @@ export default function Page() {
   const [recipeType, setRecipeType] = useState(RECIPE_TYPE_FILTER_VALUES.ALL);
   const [sortBy, setSortBy] = useState(DEFAULT_RECIPE_SORT);
   const [selectedImageOption, setSelectedImageOption] = useState(SAMPLE_IMAGE_SELECTION);
-  const hasLoadedInitialResults = useRef(false);
+  const isInitialFilterRender = useRef(true);
   const queryRef = useRef("");
   const resultsRef = useRef([]);
   const hasMoreRef = useRef(false);
@@ -370,11 +370,15 @@ export default function Page() {
       recipeType: RECIPE_TYPE_FILTER_VALUES.ALL,
       sortBy: DEFAULT_RECIPE_SORT
     });
-    hasLoadedInitialResults.current = true;
   }, [startSearch]);
 
+  // Skips its own first run (which the mount effect above already covers
+  // with the same default values) and fires only on an actual filter change.
   useEffect(() => {
-    if (!hasLoadedInitialResults.current) return;
+    if (isInitialFilterRender.current) {
+      isInitialFilterRender.current = false;
+      return;
+    }
     startSearch(queryRef.current, { onlyMine, onlySaved, recipeType, sortBy });
   }, [onlyMine, onlySaved, recipeType, sortBy, startSearch]);
 

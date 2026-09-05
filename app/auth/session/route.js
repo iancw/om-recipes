@@ -8,9 +8,7 @@ export async function GET() {
             user: session?.user
                 ? {
                     id: session.user.id,
-                    uuid: session.user.uuid,
-                    email: session.user.email,
-                    name: session.user.name
+                    uuid: session.user.uuid
                 }
                 : null
         },

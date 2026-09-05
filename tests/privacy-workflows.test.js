@@ -13,6 +13,8 @@ let getMissingObjectStorageEnvVarsMock;
 let getObjectStorageClientFromEnvMock;
 let getObjectStorageNamespaceFromEnvMock;
 let getObjectMock;
+let revalidateRecipeDetailMock;
+let deleteUserStateKeyMock;
 
 let selectHandlers = [];
 let insertHandlers = [];
@@ -64,6 +66,20 @@ vi.mock('../lib/comments.js', () => ({
     getCommentsPostedByAuthors: vi.fn(async () => [])
 }));
 
+vi.mock('../lib/public-recipe-catalog-cache.js', () => ({
+    revalidatePublicRecipeCatalog: vi.fn(() => Promise.resolve()),
+    revalidateRecipeDetail: (...args) => revalidateRecipeDetailMock(...args)
+}));
+
+vi.mock('../lib/user-state-store.js', () => ({
+    deleteUserStateKey: (...args) => deleteUserStateKeyMock(...args)
+}));
+
+vi.mock('../lib/user-state-cache.js', () => ({
+    stateKey: (uuid) => `state/users/${uuid}.json`,
+    pendingKey: (uuid) => `pending/${uuid}`
+}));
+
 describe('privacy workflows', () => {
     beforeEach(() => {
         vi.resetModules();
@@ -111,6 +127,8 @@ describe('privacy workflows', () => {
         getObjectMock = vi.fn(async () => ({
             value: Readable.from([Buffer.from('image-bytes')])
         }));
+        revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
+        deleteUserStateKeyMock = vi.fn(async () => {});
     });
 
     it('creates and completes a privacy export request', async () => {
@@ -468,7 +486,7 @@ describe('privacy workflows', () => {
         deleteHandlers.push(
             () => ({ where: vi.fn(() => Promise.resolve()) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
-            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve([{ id: 501 }, { id: 502 }])) })) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
             () => ({ where: vi.fn(() => Promise.resolve()) }),
@@ -482,7 +500,70 @@ describe('privacy workflows', () => {
 
         expect(deleteImagesByIdsMock).toHaveBeenCalledWith([700, 701]);
         expect(deleteMock).toHaveBeenCalledTimes(7);
+        expect(deleteUserStateKeyMock).toHaveBeenCalledWith('state/users/user-uuid.json');
+        expect(deleteUserStateKeyMock).toHaveBeenCalledWith('pending/user-uuid');
         expect(updateMock).toHaveBeenCalledTimes(2);
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(501);
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(502);
+    });
+
+    it('completes account deletion even when the user-state blob cleanup fails', async () => {
+        const { startAccountDeletion } = await import('../lib/privacy.js');
+
+        deleteUserStateKeyMock = vi.fn(async () => {
+            throw new Error('blobs outage');
+        });
+
+        selectHandlers.push(
+            () => makeSelectChain([]),
+            () => makeSelectChain([{ id: 88 }]),
+            () => makeSelectChain([{ id: 700 }, { id: 701 }])
+        );
+
+        insertHandlers.push(() => ({
+            values: vi.fn(() => ({
+                returning: vi.fn(() =>
+                    Promise.resolve([
+                        {
+                            id: 2,
+                            userId: 5,
+                            subjectUserUuid: 'user-uuid',
+                            requestType: 'delete_account'
+                        }
+                    ])
+                )
+            }))
+        }));
+
+        updateHandlers.push(
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            }),
+            () => ({
+                set: vi.fn(() => ({
+                    where: vi.fn(() => Promise.resolve())
+                }))
+            })
+        );
+
+        deleteHandlers.push(
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve([{ id: 501 }, { id: 502 }])) })) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) }),
+            () => ({ where: vi.fn(() => Promise.resolve()) })
+        );
+
+        await expect(
+            startAccountDeletion({
+                userId: 5,
+                userUuid: 'user-uuid'
+            })
+        ).resolves.toBe(2);
     });
 
     it('clears expired export artifacts and abandoned uploads during retention cleanup', async () => {

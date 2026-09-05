@@ -1,224 +1,196 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-let selectMock;
 let getSessionMock;
-let getSavedRecipeIdsForUserMock;
-const cacheState = vi.hoisted(() => ({ entries: new Map() }));
-
-vi.mock('next/cache', () => {
-    return {
-        unstable_cache: (fn, keyParts = []) => async (...args) => {
-            const key = JSON.stringify([keyParts, args]);
-            if (!cacheState.entries.has(key)) cacheState.entries.set(key, fn(...args));
-            return cacheState.entries.get(key);
-        },
-        revalidateTag: vi.fn()
-    };
-});
-
-vi.mock('../db/index.ts', () => ({
-    db: {
-        select: (...args) => selectMock(...args)
-    }
-}));
+let getRecipeIndexMock;
+let getUserSavedStateMock;
 
 vi.mock('../lib/auth.js', () => ({
     getSession: (...args) => getSessionMock(...args)
 }));
 
-vi.mock('../lib/recipe-saves.js', () => ({
-    getSavedRecipeIdsForUser: (...args) => getSavedRecipeIdsForUserMock(...args)
+vi.mock('../lib/public-recipe-catalog.js', () => ({
+    getRecipeIndex: (...args) => getRecipeIndexMock(...args)
 }));
 
-function makeSelectChain(result) {
+vi.mock('../lib/user-state-cache.js', () => ({
+    getUserSavedState: (...args) => getUserSavedStateMock(...args)
+}));
+
+function makeRecipe(overrides) {
     return {
-        from: vi.fn().mockReturnThis(),
-        leftJoin: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        groupBy: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        offset: vi.fn(() => Promise.resolve(result)),
-        then: (onFulfilled, onRejected) => Promise.resolve(result).then(onFulfilled, onRejected)
+        id: 101, uuid: 'recipe-uuid', slug: 'portra-400', type: 'COLOR',
+        recipeName: 'Portra 400', authorName: 'Author', description: 'Description',
+        authorId: 9, authorUserId: 55, saveCount: 3,
+        createdAt: new Date('2026-04-30T00:00:00Z'),
+        createdAtMs: new Date('2026-04-30T00:00:00Z').getTime(),
+        comparisonImages: [{ id: 201, preparedObjectKey: 'authors/a/recipes/r/comparison.jpg', assetUrls: { original: 'https://images.om-recipes.com/authors/a/recipes/r/comparison.jpg' }, label: 'Before' }],
+        sampleImages: [{ id: 301, preparedObjectKey: 'authors/a/recipes/r/sample.jpg', assetUrls: { original: 'https://images.om-recipes.com/authors/a/recipes/r/sample.jpg' }, isPrimary: true }],
+        ...overrides
     };
 }
 
 describe('recipe search route', () => {
     beforeEach(() => {
         vi.resetModules();
-        cacheState.entries.clear();
-
-        getSessionMock = vi.fn(async () => ({ user: { id: 42 } }));
-        getSavedRecipeIdsForUserMock = vi.fn(async () => new Set([101]));
-
-        const selectResults = [
-            [
-                {
-                    id: 101,
-                    uuid: 'recipe-uuid',
-                    slug: 'portra-400',
-                    recipeName: 'Portra 400',
-                    authorName: 'Author',
-                    description: 'Description',
-                    sourceUrl: null,
-                    yellow: 0,
-                    orange: 0,
-                    orangeRed: 0,
-                    red: 0,
-                    magenta: 0,
-                    violet: 0,
-                    blue: 0,
-                    blueCyan: 0,
-                    cyan: 0,
-                    greenCyan: 0,
-                    green: 0,
-                    yellowGreen: 0,
-                    contrast: 0,
-                    sharpness: 0,
-                    highlights: 0,
-                    shadows: 0,
-                    midtones: 0,
-                    shadingEffect: 0,
-                    exposureCompensation: 0,
-                    whiteBalance2: null,
-                    whiteBalanceTemperature: null,
-                    whiteBalanceAmberOffset: 0,
-                    whiteBalanceGreenOffset: 0,
-                    createdAt: new Date('2026-04-30T00:00:00Z'),
-                    authorSocial: {
-                        instagram: null,
-                        flickr: null,
-                        website: null,
-                        kofi: null
-                    },
-                    saveCount: 3
-                }
-            ],
-            [
-                {
-                    recipeId: 101,
-                    label: 'Before',
-                    image: {
-                        id: 201,
-                        preparedObjectKey: 'authors/a/recipes/r/comparison.jpg',
-                        smallUrl: '/assets/images/320/authors/a/recipes/r/comparison.jpg',
-                        fullSizeUrl: '/assets/images/original/authors/a/recipes/r/comparison.jpg',
-                        dimensions: { width: 320, height: 200 },
-                        camera: 'OM-3',
-                        lens: '25mm'
-                    }
-                },
-                {
-                    recipeId: 101,
-                    label: 'Hidden',
-                    image: {
-                        id: 202,
-                        preparedObjectKey: 'authors/a/recipes/r/hidden-comparison.jpg',
-                        smallUrl: '/assets/images/320/authors/a/recipes/r/hidden-comparison.jpg',
-                        fullSizeUrl: '/assets/images/original/authors/a/recipes/r/hidden-comparison.jpg',
-                        dimensions: { width: 320, height: 200 },
-                        camera: 'OM-3',
-                        lens: '25mm',
-                        copyright: false
-                    }
-                }
-            ],
-            [
-                {
-                    recipeId: 101,
-                    image: {
-                        id: 301,
-                        preparedObjectKey: 'authors/a/recipes/r/sample.jpg',
-                        smallUrl: '/assets/images/320/authors/a/recipes/r/sample.jpg',
-                        fullSizeUrl: '/assets/images/original/authors/a/recipes/r/sample.jpg',
-                        dimensions: { width: 320, height: 200 },
-                        camera: 'OM-3',
-                        lens: '25mm',
-                        validExif: true
-                    },
-                    isPrimary: true,
-                    author: {
-                        id: 9,
-                        uuid: 'author-uuid',
-                        name: 'Photographer',
-                        instagramLink: null,
-                        flickrLink: null,
-                        website: null,
-                        kofiLink: null
-                    }
-                },
-                {
-                    recipeId: 101,
-                    image: {
-                        id: 302,
-                        preparedObjectKey: 'authors/a/recipes/r/hidden-sample.jpg',
-                        smallUrl: '/assets/images/320/authors/a/recipes/r/hidden-sample.jpg',
-                        fullSizeUrl: '/assets/images/original/authors/a/recipes/r/hidden-sample.jpg',
-                        dimensions: { width: 320, height: 200 },
-                        camera: 'OM-3',
-                        lens: '25mm',
-                        validExif: true,
-                        copyright: false
-                    },
-                    isPrimary: false,
-                    author: {
-                        id: 9,
-                        uuid: 'author-uuid',
-                        name: 'Photographer',
-                        instagramLink: null,
-                        flickrLink: null,
-                        website: null,
-                        kofiLink: null
-                    }
-                }
-            ]
-        ];
-
-        selectMock = vi.fn(() => {
-            if (selectResults.length === 0) {
-                throw new Error('Unexpected select call');
-            }
-            return makeSelectChain(selectResults.shift());
-        });
+        getSessionMock = vi.fn(async () => ({ user: { id: 42, uuid: 'user-uuid' } }));
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [], userId: 42, hydratedAt: 1 }));
+        getRecipeIndexMock = vi.fn(async () => [makeRecipe({})]);
     });
 
-    it('returns hydrated comparison and sample images with asset-host URLs', async () => {
+    it('returns hydrated comparison and sample images with no eager saved-status lookup for a logged-out request', async () => {
+        getSessionMock = vi.fn(async () => null);
         const { GET } = await import('../app/recipes/search/route.js');
-
-        const response = await GET(
-            new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0')
-        );
+        const response = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0'));
         const body = await response.json();
 
         expect(body.results).toHaveLength(1);
-        expect(body.results[0].comparisonImages[0]).toMatchObject({
-            id: 201,
-            preparedObjectKey: 'authors/a/recipes/r/comparison.jpg',
-            assetUrls: {
-                original: 'https://images.om-recipes.com/authors/a/recipes/r/comparison.jpg'
-            },
-            label: 'Before'
-        });
-        expect(body.results[0].sampleImages[0]).toMatchObject({
-            id: 301,
-            preparedObjectKey: 'authors/a/recipes/r/sample.jpg',
-            assetUrls: {
-                original: 'https://images.om-recipes.com/authors/a/recipes/r/sample.jpg'
-            },
-            isPrimary: true
-        });
-        expect(body.results[0].comparisonImages).toHaveLength(1);
-        expect(body.results[0].sampleImages).toHaveLength(1);
+        expect(body.results[0].isSaved).toBe(false);
+        expect(getUserSavedStateMock).not.toHaveBeenCalled();
     });
 
-    it('reuses the public catalog query for a logged-in all-recipes request', async () => {
+    it('marks isSaved true for cards the logged-in viewer has saved, false otherwise', async () => {
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [101], userId: 42, hydratedAt: 1 }));
         const { GET } = await import('../app/recipes/search/route.js');
-        const request = new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0');
+        const response = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0'));
+        const body = await response.json();
 
-        await GET(request);
-        await GET(request);
+        expect(getUserSavedStateMock).toHaveBeenCalledWith('user-uuid', 42);
+        expect(body.results[0].id).toBe(101);
+        expect(body.results[0].isSaved).toBe(true);
+    });
 
-        expect(selectMock).toHaveBeenCalledTimes(3);
-        expect(getSavedRecipeIdsForUserMock).toHaveBeenCalledTimes(2);
+    it('fetches the recipe index exactly once across two requests at different offsets', async () => {
+        getRecipeIndexMock = vi.fn(async () =>
+            Array.from({ length: 20 }, (_, i) => makeRecipe({ id: 100 + i, slug: `recipe-${i}`, recipeName: `Recipe ${i}` }))
+        );
+        const { GET } = await import('../app/recipes/search/route.js');
+
+        const first = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0'));
+        const second = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=12'));
+
+        const firstBody = await first.json();
+        const secondBody = await second.json();
+
+        expect(firstBody.results).toHaveLength(12);
+        expect(secondBody.results).toHaveLength(8);
+        expect(secondBody.hasMore).toBe(false);
+        expect(getRecipeIndexMock).toHaveBeenCalledTimes(2); // called per-request, but each call is a cache hit inside getRecipeIndex itself (Task 1) — this route never re-queries Postgres for a new offset
+    });
+
+    it('filters to the saved set via the cache under onlySaved, with no DB call', async () => {
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [101], userId: 42, hydratedAt: 1 }));
+        const { GET } = await import('../app/recipes/search/route.js');
+        const response = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0&onlySaved=1'));
+        const body = await response.json();
+
+        expect(body.results).toHaveLength(1);
+        expect(body.results[0].isSaved).toBe(true);
+        expect(getUserSavedStateMock).toHaveBeenCalledWith('user-uuid', 42);
+    });
+
+    it('filters to only the requesting user\'s own recipes under onlyMine, with no DB call', async () => {
+        getRecipeIndexMock = vi.fn(async () => [
+            makeRecipe({ id: 101, authorUserId: 42 }),
+            makeRecipe({ id: 102, authorUserId: 99 })
+        ]);
+        const { GET } = await import('../app/recipes/search/route.js');
+
+        const response = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0&onlyMine=1'));
+        const body = await response.json();
+
+        expect(body.results.map((r) => r.id)).toEqual([101]);
+    });
+
+    it('returns an empty result set for onlyMine/onlySaved when logged out', async () => {
+        getSessionMock = vi.fn(async () => null);
+        const { GET } = await import('../app/recipes/search/route.js');
+
+        const response = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0&onlySaved=1'));
+        const body = await response.json();
+
+        expect(body).toEqual({ results: [], hasMore: false, nextOffset: 0 });
+    });
+
+    it('strips internal index fields (authorId, authorUserId, aliases, saveCount, createdAtMs) from the public response', async () => {
+        getRecipeIndexMock = vi.fn(async () => [makeRecipe({ aliases: ['old-slug'] })]);
+        const { GET } = await import('../app/recipes/search/route.js');
+
+        const response = await GET(new Request('https://om-recipes.test/recipes/search?q=&limit=12&offset=0'));
+        const body = await response.json();
+
+        expect(body.results).toHaveLength(1);
+        const [result] = body.results;
+        expect(result).not.toHaveProperty('authorId');
+        expect(result).not.toHaveProperty('authorUserId');
+        expect(result).not.toHaveProperty('aliases');
+        expect(result).not.toHaveProperty('saveCount');
+        expect(result).not.toHaveProperty('createdAtMs');
+        // Fields the frontend does rely on remain present.
+        expect(result).toMatchObject({ id: 101, recipeName: 'Portra 400', authorName: 'Author' });
+    });
+});
+
+describe('recipe search route sort tiebreaks', () => {
+    beforeEach(() => {
+        vi.resetModules();
+        getSessionMock = vi.fn(async () => ({ user: { id: 42, uuid: 'user-uuid' } }));
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [], userId: 42, hydratedAt: 1 }));
+    });
+
+    async function getSortedIds(recipes, sortParam) {
+        getRecipeIndexMock = vi.fn(async () => recipes);
+        const { GET } = await import('../app/recipes/search/route.js');
+        const sortQuery = sortParam ? `&sort=${sortParam}` : '';
+        const response = await GET(new Request(`https://om-recipes.test/recipes/search?q=&limit=12&offset=0${sortQuery}`));
+        const body = await response.json();
+        return body.results.map((r) => r.id);
+    }
+
+    it('tiebreaks OLDEST and NEWEST by save count then id ascending when createdAt ties', async () => {
+        // Same createdAtMs and same saveCount for both -> falls all the way
+        // through to the final id-ascending tiebreak in both directions.
+        const recipes = [
+            makeRecipe({ id: 302, saveCount: 5, createdAtMs: 1000 }),
+            makeRecipe({ id: 301, saveCount: 5, createdAtMs: 1000 })
+        ];
+
+        expect(await getSortedIds(recipes, 'oldest')).toEqual([301, 302]);
+        expect(await getSortedIds(recipes, 'newest')).toEqual([301, 302]);
+    });
+
+    it('tiebreaks the explicit SAVES sort by save count, then createdAt descending, then id descending', async () => {
+        // id ordering deliberately runs opposite to createdAtMs ordering
+        // within the tied-saveCount pair, so a regression that skips the
+        // createdAt tiebreak (falling straight through to id) produces a
+        // detectably wrong order instead of accidentally matching.
+        const recipes = [
+            makeRecipe({ id: 555, saveCount: 10, createdAtMs: 500 }), // highest saveCount, always first
+            makeRecipe({ id: 999, saveCount: 5, createdAtMs: 1000 }), // tied saveCount, older, larger id
+            makeRecipe({ id: 101, saveCount: 5, createdAtMs: 2000 }) // tied saveCount, newer, smaller id
+        ];
+
+        // NOTE: the site's DEFAULT sort (no `sort` param at all) normalizes to
+        // NEWEST, not SAVES (see lib/recipe-sort.js's DEFAULT_RECIPE_SORT) —
+        // only an explicit `?sort=saves` reaches sortRecipes's SAVES branch.
+        expect(await getSortedIds(recipes, 'saves')).toEqual([555, 101, 999]);
+    });
+
+    it('falls back to NEWEST order (the site default) when no sort param is given', async () => {
+        const recipes = [
+            makeRecipe({ id: 555, saveCount: 10, createdAtMs: 500 }),
+            makeRecipe({ id: 999, saveCount: 5, createdAtMs: 1000 }),
+            makeRecipe({ id: 101, saveCount: 5, createdAtMs: 2000 })
+        ];
+
+        expect(await getSortedIds(recipes, null)).toEqual([101, 999, 555]);
+    });
+
+    it('tiebreaks AUTHOR sort by id ascending (not descending, unlike the default SAVES branch)', async () => {
+        const recipes = [
+            makeRecipe({ id: 302, authorName: 'Same Author', recipeName: 'Same Recipe', saveCount: 5 }),
+            makeRecipe({ id: 301, authorName: 'Same Author', recipeName: 'Same Recipe', saveCount: 5 })
+        ];
+
+        expect(await getSortedIds(recipes, 'author')).toEqual([301, 302]);
     });
 });

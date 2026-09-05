@@ -9,10 +9,15 @@ let addCommentMock;
 let deleteCommentMock;
 let notifyRecipeCommentedMock;
 let findOrCreateAuthorForUserMock;
+let reconcileUserStateBestEffortMock;
 
 vi.mock('../lib/auth.js', () => ({
-    requireUser: () => Promise.resolve({ user: { id: 9, email: 'user@example.com' } }),
+    requireUser: () => Promise.resolve({ user: { id: 9, uuid: 'commenter-uuid' } }),
     findOrCreateAuthorForUser: (...args) => findOrCreateAuthorForUserMock(...args)
+}));
+
+vi.mock('../lib/user-state-flush.js', () => ({
+    reconcileUserStateBestEffort: (...args) => reconcileUserStateBestEffortMock(...args)
 }));
 
 vi.mock('../lib/comments.js', () => ({
@@ -22,6 +27,11 @@ vi.mock('../lib/comments.js', () => ({
 
 vi.mock('../lib/notifications.js', () => ({
     notifyRecipeCommented: (...args) => notifyRecipeCommentedMock(...args)
+}));
+
+let revalidateRecipeDetailMock;
+vi.mock('../lib/public-recipe-catalog-cache.js', () => ({
+    revalidateRecipeDetail: (...args) => revalidateRecipeDetailMock(...args)
 }));
 
 vi.mock('../db/index.ts', () => ({
@@ -41,8 +51,13 @@ describe('addCommentAction', () => {
         addCommentMock = vi.fn(() => Promise.resolve({ id: 55, uuid: 'comment-uuid', createdAt: new Date('2026-08-26') }));
         notifyRecipeCommentedMock = vi.fn(() => Promise.resolve());
         findOrCreateAuthorForUserMock = vi.fn(() => Promise.resolve({ id: 2, uuid: 'author-uuid', name: 'Commenter' }));
+        revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
+        reconcileUserStateBestEffortMock = vi.fn(() => Promise.resolve());
 
-        const recipeSelectResponses = [[{ id: 123, uuid: 'recipe-uuid', slug: 'recipe-slug' }]];
+        const recipeSelectResponses = [
+            [{ id: 123, uuid: 'recipe-uuid', slug: 'recipe-slug' }],
+            [{ email: 'user@example.com' }]
+        ];
         selectMock = vi.fn(() => {
             const res = recipeSelectResponses.shift() ?? [];
             return {
@@ -68,7 +83,9 @@ describe('addCommentAction', () => {
         expect(findOrCreateAuthorForUserMock).toHaveBeenCalledWith({ userId: 9, email: 'user@example.com' });
         expect(addCommentMock).toHaveBeenCalledWith({ recipeId: 123, authorId: 2, body: 'Nice recipe!' });
         expect(notifyRecipeCommentedMock).toHaveBeenCalledWith(123, 55, 2);
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(123);
         expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/recipe-slug');
+        expect(reconcileUserStateBestEffortMock).toHaveBeenCalledWith('commenter-uuid');
     });
 
     it('rejects a non-numeric recipe id', async () => {
@@ -89,6 +106,22 @@ describe('addCommentAction', () => {
         expect(revalidatePathMock).not.toHaveBeenCalled();
     });
 
+    it('returns the ghost-session error as data instead of throwing when findOrCreateAuthorForUser rejects', async () => {
+        // A device's cookie can still verify as valid for up to a week after the
+        // account behind it was deleted elsewhere (stateless sessions). If the
+        // first write from such a session hits findOrCreateAuthorForUser, it now
+        // rejects with a clean message instead of a raw FK-violation throw — this
+        // must surface as returned data, not an uncaught throw.
+        findOrCreateAuthorForUserMock = vi.fn(() =>
+            Promise.reject(new Error('Your account no longer exists. Please sign in again.'))
+        );
+
+        const result = await addCommentAction({ recipeId: 123, body: 'Hi' });
+
+        expect(result).toEqual({ ok: false, error: 'Your account no longer exists. Please sign in again.' });
+        expect(addCommentMock).not.toHaveBeenCalled();
+    });
+
     it('still throws when the recipe does not exist', async () => {
         selectMock = vi.fn(() => ({
             from: vi.fn().mockReturnThis(),
@@ -106,6 +139,7 @@ describe('deleteCommentAction', () => {
         vi.resetModules();
         revalidatePathMock = vi.fn();
         deleteCommentMock = vi.fn(() => Promise.resolve());
+        revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
 
         // Chain must support BOTH `.where().limit(1)` (recipe lookup, comment lookup)
         // and a bare `.where()` awaited directly (author lookup, no .limit call) —
@@ -137,6 +171,7 @@ describe('deleteCommentAction', () => {
         await deleteCommentAction({ recipeId: 123, commentId: 55 });
 
         expect(deleteCommentMock).toHaveBeenCalledWith({ commentId: 55, requestingAuthorIds: [2], recipeAuthorId: 1 });
+        expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(123);
         expect(revalidatePathMock).toHaveBeenCalledWith('/recipes/recipe-slug');
     });
 

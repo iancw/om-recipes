@@ -37,9 +37,10 @@ import {
 import { buildRecipeImageAssetUrl } from '../../lib/recipe-image-assets.js';
 import { findOrCreateAuthorForUser, requireUser } from '../../lib/auth.js';
 import { getRecipePath } from '../../lib/recipe-url.js';
-import { revalidatePublicRecipeCatalog } from '../../lib/public-recipe-catalog-cache.js';
+import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../lib/public-recipe-catalog-cache.js';
 import { notifyNewRecipe, notifySampleImageAdded } from '../../lib/notifications.js';
 import { toStoredCameraMetadataText } from '../../lib/exif-reprocess.js';
+import { reconcileUserStateBestEffort } from '../../lib/user-state-flush.js';
 
 const ORIGINAL_BUCKET = process.env.OCI_IMAGES_ORIGINAL_BUCKET;
 const RESIZED_BUCKET = process.env.OCI_IMAGES_PROCESSED_BUCKET;
@@ -673,7 +674,6 @@ export async function prepareRecipeUploadAction({ parameters }) {
 
         const authorRow = await findOrCreateAuthorForUser({
             userId: session.user.id,
-            email: session.user.email,
             displayName: author
         });
         const authorId = authorRow.id;
@@ -809,7 +809,11 @@ export async function prepareRecipeUploadAction({ parameters }) {
             name: `upload-${imageUuid}`
         });
 
-        if (shouldCreateRecipe) await revalidatePublicRecipeCatalog();
+        if (shouldCreateRecipe) {
+            await revalidatePublicRecipeCatalog();
+            await revalidateRecipeDetail(createdRecipeId);
+        }
+        await reconcileUserStateBestEffort(session.user.uuid);
         return {
             ok: true,
             parUrl,
@@ -946,6 +950,8 @@ export async function finalizeRecipeUploadAction({ parameters }) {
                 }));
             }
             await revalidatePublicRecipeCatalog();
+            await revalidateRecipeDetail(preparedRecipeId);
+            await reconcileUserStateBestEffort(session.user.uuid);
             return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
         }
 
@@ -1030,6 +1036,8 @@ export async function finalizeRecipeUploadAction({ parameters }) {
             resizeStatus.resizeSkipped = true;
             resizeStatus.resizeSucceeded = true;
             await revalidatePublicRecipeCatalog();
+            await revalidateRecipeDetail(preparedRecipeId);
+            await reconcileUserStateBestEffort(session.user.uuid);
             return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
         }
 
@@ -1042,6 +1050,8 @@ export async function finalizeRecipeUploadAction({ parameters }) {
         }));
 
         await revalidatePublicRecipeCatalog();
+        await revalidateRecipeDetail(preparedRecipeId);
+        await reconcileUserStateBestEffort(session.user.uuid);
         return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
     } catch (e) {
         console.error(e);

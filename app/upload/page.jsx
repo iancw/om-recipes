@@ -1,9 +1,12 @@
 import { after } from 'next/server';
+import { eq } from 'drizzle-orm';
 import { uploadDisabled } from 'utils';
 import { Alert } from 'components/alert';
 import { Markdown } from 'components/markdown';
 import RecipeUpload from './RecipeUpload';
-import { getSession } from '../../lib/auth.js';
+import { db } from '../../db/index.ts';
+import { authors, users } from '../../db/schema.ts';
+import { defaultDisplayNameFromEmail, getSession } from '../../lib/auth.js';
 import { warmImageResizeFunction } from '../../lib/oci/functionsInvoke.js';
 import LoginButton from 'components/LoginButton';
 import { Badge } from 'components/ui/badge';
@@ -32,6 +35,17 @@ export default async function Page() {
         after(() => warmImageResizeFunction().catch(() => {}));
     }
 
+    let initialAuthor = '';
+    if (user) {
+        const [row] = await db
+            .select({ email: users.email, authorName: authors.name })
+            .from(users)
+            .leftJoin(authors, eq(authors.userId, users.id))
+            .where(eq(users.id, user.id))
+            .limit(1);
+        initialAuthor = row?.authorName ?? defaultDisplayNameFromEmail(row?.email) ?? '';
+    }
+
     return (
         <div className="flex w-full flex-col gap-8 pb-10 pt-2">
             {uploadDisabled ? (
@@ -54,7 +68,7 @@ export default async function Page() {
             {!uploadDisabled &&
                 <>
                     {user ? (
-                        <RecipeUpload initialAuthor={session?.author?.name ?? user?.name ?? ''} />
+                        <RecipeUpload initialAuthor={initialAuthor} />
                     ) : (
                         <Card className="max-w-xl border-border/60 bg-background/55">
                             <CardHeader className="pb-3">

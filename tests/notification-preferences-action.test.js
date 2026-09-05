@@ -2,12 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let upsertNotificationPreferencesMock;
 let revalidatePathMock;
+let reconcileUserStateBestEffortMock;
 let updateMyNotificationPreferencesAction;
 
 vi.mock('../lib/auth.js', () => ({
-    requireUser: () => Promise.resolve({ user: { id: 9, email: 'owner@example.com' } }),
+    requireUser: () => Promise.resolve({ user: { id: 9, email: 'owner@example.com', uuid: 'owner-uuid' } }),
     findOrCreateAuthorForUser: vi.fn(),
     clearSessionCookie: vi.fn()
+}));
+
+vi.mock('../lib/user-state-flush.js', () => ({
+    reconcileUserStateBestEffort: (...args) => reconcileUserStateBestEffortMock(...args)
 }));
 
 vi.mock('../lib/notifications.js', () => ({
@@ -36,6 +41,7 @@ describe('updateMyNotificationPreferencesAction', () => {
         vi.resetModules();
         upsertNotificationPreferencesMock = vi.fn(() => Promise.resolve());
         revalidatePathMock = vi.fn();
+        reconcileUserStateBestEffortMock = vi.fn(() => Promise.resolve());
         const mod = await import('../app/profile/actions.js');
         updateMyNotificationPreferencesAction = mod.updateMyNotificationPreferencesAction;
     });
@@ -61,5 +67,6 @@ describe('updateMyNotificationPreferencesAction', () => {
             emailDigestEnabled: true
         });
         expect(revalidatePathMock).toHaveBeenCalledWith('/profile');
+        expect(reconcileUserStateBestEffortMock).toHaveBeenCalledWith('owner-uuid');
     });
 });

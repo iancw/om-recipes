@@ -1,8 +1,11 @@
 import Link from 'next/link';
+import { eq } from 'drizzle-orm';
 import { Alert } from 'components/alert';
 import { Button, buttonVariants } from 'components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from 'components/ui/card';
 import { Input } from 'components/ui/input';
+import { db } from '../../db/index.ts';
+import { users } from '../../db/schema.ts';
 import { getSession, normalizeRedirectPath } from '../../lib/auth.js';
 
 export const metadata = {
@@ -38,11 +41,17 @@ export default async function LoginPage({ searchParams }) {
     const error = getErrorMessage(resolvedSearchParams?.error);
 
     if (session?.user) {
+        const [row] = await db
+            .select({ email: users.email })
+            .from(users)
+            .where(eq(users.id, session.user.id))
+            .limit(1);
+
         return (
             <Card className="max-w-xl">
                 <CardHeader>
                     <CardTitle>Log In</CardTitle>
-                    <CardDescription>You’re already signed in as {session.user.email}.</CardDescription>
+                    <CardDescription>You’re already signed in as {row?.email}.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Link href={redirectTo} className={buttonVariants()}>

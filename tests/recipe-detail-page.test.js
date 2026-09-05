@@ -6,10 +6,15 @@ let notFoundMock;
 let resolveRecipeIndexEntryMock;
 let findRelatedWhiteBalanceRecipesMock;
 let getCachedRecipeDetailMock;
+let getUserSavedStateMock;
 let capturedRecipeCardProps;
 
 vi.mock('../lib/auth.js', () => ({
     getSession: (...args) => getSessionMock(...args)
+}));
+
+vi.mock('../lib/user-state-cache.js', () => ({
+    getUserSavedState: (...args) => getUserSavedStateMock(...args)
 }));
 
 vi.mock('../lib/public-recipe-catalog.js', () => ({
@@ -102,6 +107,7 @@ describe('recipe detail page redirects', () => {
         );
         findRelatedWhiteBalanceRecipesMock = vi.fn(async () => []);
         getCachedRecipeDetailMock = vi.fn(async () => baseDetail);
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [], userId: 42, hydratedAt: 1 }));
     });
 
     afterEach(() => { delete globalThis.React; });
@@ -158,7 +164,28 @@ describe('recipe detail page redirects', () => {
 
         expect(capturedRecipeCardProps.recipe.comparisonImages[0]).toMatchObject({ id: 201, label: 'Before' });
         expect(capturedRecipeCardProps.recipe.sampleImages[0]).toMatchObject({ id: 301, isPrimary: true });
-        // No eager saved-status query on this page load — see app/recipes/[id]/page.jsx.
+        // Viewer's cached saved set doesn't include this recipe, so isSaved is false.
+        expect(capturedRecipeCardProps.recipe.isSaved).toBe(false);
+    });
+
+    it('reflects true isSaved when the viewer has this recipe in their cached saved set', async () => {
+        getSessionMock = vi.fn(async () => ({ user: { id: 42, uuid: 'user-uuid' } }));
+        getUserSavedStateMock = vi.fn(async () => ({ savedRecipeIds: [123], userId: 42, hydratedAt: 1 }));
+
+        const mod = await import('../app/recipes/[id]/page.jsx');
+        await mod.default({ params: Promise.resolve({ id: 'portra-400' }) });
+
+        expect(getUserSavedStateMock).toHaveBeenCalledWith('user-uuid', 42);
+        expect(capturedRecipeCardProps.recipe.isSaved).toBe(true);
+    });
+
+    it('stays false and skips the cache lookup for a logged-out viewer', async () => {
+        getSessionMock = vi.fn(async () => null);
+
+        const mod = await import('../app/recipes/[id]/page.jsx');
+        await mod.default({ params: Promise.resolve({ id: 'portra-400' }) });
+
+        expect(getUserSavedStateMock).not.toHaveBeenCalled();
         expect(capturedRecipeCardProps.recipe.isSaved).toBe(false);
     });
 

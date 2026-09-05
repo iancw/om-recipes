@@ -2,6 +2,7 @@ import { cache } from 'react';
 import { notFound, permanentRedirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '../../../lib/auth.js';
+import { getUserSavedState } from '../../../lib/user-state-cache.js';
 import { db } from '../../../db/index.ts';
 import { authors } from '../../../db/schema.ts';
 import { eq } from 'drizzle-orm';
@@ -101,6 +102,10 @@ export default async function Page({ params }) {
     // Any non-canonical identifier (old slug alias or uuid) redirects to the current slug.
     if (recipe.slug && id && id !== recipe.slug) {
         permanentRedirect(getRecipePath(recipe));
+    }
+    if (session?.user?.uuid) {
+        const savedState = await getUserSavedState(session.user.uuid, userId);
+        recipe.isSaved = savedState.savedRecipeIds.includes(recipe.id);
     }
     const whiteBalance = getEquivalentWhiteBalance(recipe);
     const relatedWhiteBalanceRecipes = await findRelatedWhiteBalanceRecipes(recipe.id, whiteBalance, recipe.type);

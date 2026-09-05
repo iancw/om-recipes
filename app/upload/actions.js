@@ -760,8 +760,6 @@ export async function prepareRecipeUploadAction({ parameters }) {
 
             createdRecipeId = recipeRow.id;
             createdRecipeUuid = recipeRow.uuid;
-
-            await notifyNewRecipe(createdRecipeId);
         }
 
         if (!createdRecipeId || !createdSlug) {
@@ -814,6 +812,7 @@ export async function prepareRecipeUploadAction({ parameters }) {
         if (shouldCreateRecipe) {
             await revalidatePublicRecipeCatalog();
             await revalidateRecipeDetail(createdRecipeId);
+            await notifyNewRecipe(createdRecipeId);
         }
         await reconcileUserStateBestEffort(session.user.uuid);
         return {

@@ -66,6 +66,66 @@ describe('getUserSavedState', () => {
         expect(setUserStateJsonMock).not.toHaveBeenCalled();
     });
 
+    it('backfills notifications and preferences onto a legacy blob without re-fetching saved recipes or author ids', async () => {
+        getUserStateJsonMock.mockResolvedValue({ savedRecipeIds: [3], authorIds: [7], userId: 20, hydratedAt: 111 });
+        getNotificationsForUserMock = vi.fn(() =>
+            Promise.resolve([
+                {
+                    id: 1,
+                    uuid: 'db-uuid-1',
+                    type: 'comment',
+                    dedupeKey: 'comment:9',
+                    sampleImageId: null,
+                    readAt: null,
+                    createdAt: new Date('2026-08-20T00:00:00Z'),
+                    recipe: { id: 5, slug: 'golden-hour', uuid: 'r-uuid', recipeName: 'Golden Hour' },
+                    actorAuthorName: 'Jane'
+                }
+            ])
+        );
+        const { getUserSavedState } = await import('../lib/user-state-cache.js');
+
+        const result = await getUserSavedState('abc-uuid', 20);
+
+        expect(getAllSavedRecipeIdsForUserMock).not.toHaveBeenCalled();
+        expect(authorSelectMock).not.toHaveBeenCalled();
+        expect(getNotificationsForUserMock).toHaveBeenCalledWith(20, { limit: 50 });
+        expect(getEffectivePreferencesMock).toHaveBeenCalledWith(20);
+
+        expect(result.savedRecipeIds).toEqual([3]);
+        expect(result.authorIds).toEqual([7]);
+        expect(result.userId).toBe(20);
+        expect(result.hydratedAt).toBe(111);
+        expect(result.notifications).toEqual([
+            expect.objectContaining({
+                type: 'comment',
+                recipeId: 5,
+                recipeSlug: 'golden-hour',
+                recipeName: 'Golden Hour',
+                dedupeKey: 'comment:9'
+            })
+        ]);
+        expect(result.preferences).toEqual({
+            notifyNewRecipe: false,
+            notifySampleImage: true,
+            notifySave: true,
+            notifyComment: true,
+            emailDigestEnabled: false
+        });
+
+        expect(setUserStateJsonMock).toHaveBeenCalledWith(
+            'state/users/abc-uuid.json',
+            expect.objectContaining({
+                savedRecipeIds: [3],
+                authorIds: [7],
+                userId: 20,
+                hydratedAt: 111,
+                notifications: result.notifications,
+                preferences: result.preferences
+            })
+        );
+    });
+
     it('hydrates from Postgres — including notifications and preferences — and writes the blob when none exists yet', async () => {
         getUserStateJsonMock.mockResolvedValue(null);
         getNotificationsForUserMock = vi.fn(() =>
@@ -165,7 +225,7 @@ describe('toggleSavedRecipeInState', () => {
     });
 
     it('adds the recipe and returns true when not currently saved', async () => {
-        getUserStateJsonMock = vi.fn().mockResolvedValue({ savedRecipeIds: [1], userId: 20, hydratedAt: 1 });
+        getUserStateJsonMock = vi.fn().mockResolvedValue({ savedRecipeIds: [1], authorIds: [], notifications: [], preferences: {}, userId: 20, hydratedAt: 1 });
         const { toggleSavedRecipeInState } = await import('../lib/user-state-cache.js');
 
         const isSaved = await toggleSavedRecipeInState('abc-uuid', 20, 5);
@@ -176,7 +236,7 @@ describe('toggleSavedRecipeInState', () => {
     });
 
     it('removes the recipe and returns false when already saved', async () => {
-        getUserStateJsonMock = vi.fn().mockResolvedValue({ savedRecipeIds: [1, 5], userId: 20, hydratedAt: 1 });
+        getUserStateJsonMock = vi.fn().mockResolvedValue({ savedRecipeIds: [1, 5], authorIds: [], notifications: [], preferences: {}, userId: 20, hydratedAt: 1 });
         const { toggleSavedRecipeInState } = await import('../lib/user-state-cache.js');
 
         const isSaved = await toggleSavedRecipeInState('abc-uuid', 20, 5);
@@ -187,7 +247,7 @@ describe('toggleSavedRecipeInState', () => {
     });
 
     it('marks the user dirty as a side effect', async () => {
-        getUserStateJsonMock = vi.fn().mockResolvedValue({ savedRecipeIds: [], userId: 20, hydratedAt: 1 });
+        getUserStateJsonMock = vi.fn().mockResolvedValue({ savedRecipeIds: [], authorIds: [], notifications: [], preferences: {}, userId: 20, hydratedAt: 1 });
         const { toggleSavedRecipeInState } = await import('../lib/user-state-cache.js');
 
         await toggleSavedRecipeInState('abc-uuid', 20, 5);

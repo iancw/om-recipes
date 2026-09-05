@@ -9,12 +9,24 @@ let notifyNewRecipe;
 let saveDedupeKey;
 let sampleImageDedupeKey;
 let newRecipeDedupeKey;
+let appendNotificationToUserStateMock;
+let getRecipeIndexMock;
+let getUserSavedStateMock;
 
 vi.mock('../db/index.ts', () => ({
     db: {
         select: (...args) => selectMock(...args),
         insert: (...args) => insertMock(...args)
     }
+}));
+
+vi.mock('../lib/user-state-cache.js', () => ({
+    appendNotificationToUserState: (...args) => appendNotificationToUserStateMock(...args),
+    getUserSavedState: (...args) => getUserSavedStateMock(...args)
+}));
+
+vi.mock('../lib/public-recipe-catalog.js', () => ({
+    getRecipeIndex: (...args) => getRecipeIndexMock(...args)
 }));
 
 function selectSequence(responses) {
@@ -24,6 +36,7 @@ function selectSequence(responses) {
         return {
             from: vi.fn().mockReturnThis(),
             innerJoin: vi.fn().mockReturnThis(),
+            leftJoin: vi.fn().mockReturnThis(),
             where: vi.fn().mockReturnThis(),
             orderBy: vi.fn().mockReturnThis(),
             limit: vi.fn(() => Promise.resolve(res)),
@@ -42,6 +55,9 @@ function insertRecorder() {
 describe('notification writers', () => {
     beforeEach(async () => {
         vi.resetModules();
+        appendNotificationToUserStateMock = vi.fn(() => Promise.resolve(true));
+        getRecipeIndexMock = vi.fn(() => Promise.resolve([{ id: 5, slug: 'golden-hour', recipeName: 'Golden Hour' }]));
+        getUserSavedStateMock = vi.fn(() => Promise.resolve({ preferences: { notifySave: true } }));
         const mod = await import('../lib/notifications.js');
         notifyRecipeSaved = mod.notifyRecipeSaved;
         notifySampleImageAdded = mod.notifySampleImageAdded;
@@ -64,58 +80,57 @@ describe('notification writers', () => {
 
     describe('notifyRecipeSaved', () => {
         it('skips when the saver is the recipe owner', async () => {
-            selectMock = selectSequence([[{ authorId: 1, ownerUserId: 9 }]]);
-            const rec = insertRecorder();
-            insertMock = rec.insert;
+            selectMock = selectSequence([[{ authorId: 1, ownerUserId: 9, ownerUuid: 'owner-uuid' }]]);
 
             await notifyRecipeSaved(5, 9);
 
-            expect(rec.insert).not.toHaveBeenCalled();
+            expect(appendNotificationToUserStateMock).not.toHaveBeenCalled();
         });
 
-        it('skips when the owner has notifySave off', async () => {
-            selectMock = selectSequence([
-                [{ authorId: 1, ownerUserId: 9 }],
-                [{ notifyNewRecipe: false, notifySampleImage: true, notifySave: false, emailDigestEnabled: true }]
-            ]);
-            const rec = insertRecorder();
-            insertMock = rec.insert;
+        it('skips when the owner has notifySave off in their cached preferences', async () => {
+            selectMock = selectSequence([[{ authorId: 1, ownerUserId: 9, ownerUuid: 'owner-uuid' }]]);
+            getUserSavedStateMock = vi.fn(() => Promise.resolve({ preferences: { notifySave: false } }));
 
             await notifyRecipeSaved(5, 20);
 
-            expect(rec.insert).not.toHaveBeenCalled();
-        });
-
-        it('inserts an idempotent row with the saver author name resolved', async () => {
-            selectMock = selectSequence([
-                [{ authorId: 1, ownerUserId: 9 }],
-                [{ notifyNewRecipe: false, notifySampleImage: true, notifySave: true, emailDigestEnabled: true }],
-                [{ id: 33 }]
-            ]);
-            const rec = insertRecorder();
-            insertMock = rec.insert;
-
-            await notifyRecipeSaved(5, 20);
-
-            expect(rec.values).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    recipientUserId: 9,
-                    type: 'recipe_saved',
-                    recipeId: 5,
-                    actorAuthorId: 33,
-                    dedupeKey: 'save:5:20'
-                })
-            );
-            expect(rec.onConflictDoNothing).toHaveBeenCalledTimes(1);
+            expect(appendNotificationToUserStateMock).not.toHaveBeenCalled();
         });
 
         it('does nothing when the recipe has no notifiable owner', async () => {
             selectMock = selectSequence([[]]);
+
+            await notifyRecipeSaved(5, 20);
+
+            expect(appendNotificationToUserStateMock).not.toHaveBeenCalled();
+        });
+
+        it('does nothing when the owner has no linked user account', async () => {
+            selectMock = selectSequence([[{ authorId: 1, ownerUserId: null, ownerUuid: null }]]);
+
+            await notifyRecipeSaved(5, 20);
+
+            expect(appendNotificationToUserStateMock).not.toHaveBeenCalled();
+        });
+
+        it('appends a cache entry to the owner blob with the saver author name resolved, with no Postgres write', async () => {
+            selectMock = selectSequence([
+                [{ authorId: 1, ownerUserId: 9, ownerUuid: 'owner-uuid' }],
+                [{ name: 'Jane' }]
+            ]);
             const rec = insertRecorder();
             insertMock = rec.insert;
 
             await notifyRecipeSaved(5, 20);
 
+            expect(appendNotificationToUserStateMock).toHaveBeenCalledWith('owner-uuid', 9, {
+                type: 'recipe_saved',
+                recipeId: 5,
+                recipeSlug: 'golden-hour',
+                recipeName: 'Golden Hour',
+                actorAuthorName: 'Jane',
+                sampleImageId: null,
+                dedupeKey: 'save:5:20'
+            });
             expect(rec.insert).not.toHaveBeenCalled();
         });
     });

@@ -20,6 +20,7 @@ function selectSequence(responses) {
         return {
             from: vi.fn().mockReturnThis(),
             innerJoin: vi.fn().mockReturnThis(),
+            leftJoin: vi.fn().mockReturnThis(),
             where: vi.fn().mockReturnThis(),
             orderBy: vi.fn().mockReturnThis(),
             limit: vi.fn(() => Promise.resolve(res)),

@@ -1,5 +1,5 @@
 import { requireUser } from '../../../lib/auth.js';
-import { getNotificationsForUser, getUnreadCount } from '../../../lib/notifications.js';
+import { getUserSavedState, unreadNotificationCount } from '../../../lib/user-state-cache.js';
 
 export async function GET() {
     let session;
@@ -9,13 +9,11 @@ export async function GET() {
         return Response.json({ error: 'Authentication required' }, { status: 401 });
     }
 
-    const [items, unreadCount] = await Promise.all([
-        getNotificationsForUser(session.user.id, { limit: 50 }),
-        getUnreadCount(session.user.id)
-    ]);
+    const state = await getUserSavedState(session.user.uuid, session.user.id);
+    const items = state.notifications ?? [];
 
     return Response.json(
-        { items, unreadCount },
+        { items, unreadCount: unreadNotificationCount(items) },
         { headers: { 'cache-control': 'private, no-store, max-age=0' } }
     );
 }

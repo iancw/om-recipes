@@ -20,6 +20,7 @@ let redirectMock;
 let deleteOrphanedImagesByIdsMock;
 let notifyNewRecipeMock;
 let notifySampleImageAddedMock;
+let revalidateTagMock;
 
 let selectResults = [];
 let insertHandlers = [];
@@ -188,7 +189,8 @@ vi.mock('../lib/auth.js', () => ({
 }));
 
 vi.mock('next/cache', () => ({
-    revalidatePath: (...args) => revalidatePathMock(...args)
+    revalidatePath: (...args) => revalidatePathMock(...args),
+    revalidateTag: (...args) => revalidateTagMock(...args)
 }));
 
 vi.mock('next/navigation', () => ({
@@ -296,6 +298,7 @@ beforeEach(() => {
     deleteOrphanedImagesByIdsMock = vi.fn();
     notifyNewRecipeMock = vi.fn(() => Promise.resolve());
     notifySampleImageAddedMock = vi.fn(() => Promise.resolve());
+    revalidateTagMock = vi.fn();
 });
 
 describe('prepareRecipeUploadAction duplicate handling', () => {
@@ -495,6 +498,11 @@ describe('prepareRecipeUploadAction duplicate handling', () => {
         expect(insertHandlers.length).toBe(0);
         expect(notifyNewRecipeMock).toHaveBeenCalledWith(result.recipeId);
         expect(notifyNewRecipeMock).toHaveBeenCalledTimes(1);
+        // notifyNewRecipe resolves recipe metadata from the cached, tag-invalidated recipe
+        // index, so it must run after the catalog cache has been revalidated for the newly
+        // created recipe — otherwise the notification permanently captures a null slug/name.
+        expect(revalidateTagMock).toHaveBeenCalled();
+        expect(revalidateTagMock.mock.invocationCallOrder[0]).toBeLessThan(notifyNewRecipeMock.mock.invocationCallOrder[0]);
     });
 
     it('persists camera metadata fields onto the image row when provided', async () => {

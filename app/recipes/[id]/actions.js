@@ -21,6 +21,7 @@ import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../../
 import { addComment, deleteComment } from '../../../lib/comments.js';
 import { notifyRecipeCommented } from '../../../lib/notifications.js';
 import { reconcileUserStateBestEffort } from '../../../lib/user-state-flush.js';
+import { addAuthorIdToUserState } from '../../../lib/user-state-cache.js';
 
 import {
     computeRecipeFingerprint,
@@ -443,6 +444,7 @@ export async function addCommentAction({ recipeId, body }) {
     } catch (err) {
         return { ok: false, error: err?.message || 'Unable to post comment right now' };
     }
+    await addAuthorIdToUserState(session.user.uuid, author.id);
 
     let comment;
     try {

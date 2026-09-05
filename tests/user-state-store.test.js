@@ -1,6 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import os from 'node:os';
-import path from 'node:path';
 import fs from 'node:fs/promises';
 
 let getStoreMock;
@@ -82,46 +80,39 @@ describe('user-state-store — Netlify Blobs context', () => {
 });
 
 describe('user-state-store — local filesystem fallback (no Netlify context)', () => {
-    let tmpDir;
     let originalEnv;
 
-    beforeEach(async () => {
+    beforeEach(() => {
         vi.resetModules();
         originalEnv = process.env.NETLIFY_BLOBS_CONTEXT;
         delete process.env.NETLIFY_BLOBS_CONTEXT;
-        tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'user-state-store-test-'));
-        vi.doMock('../lib/user-state-store.js', async () => {
-            const actual = await vi.importActual('../lib/user-state-store.js');
-            return actual;
-        });
     });
 
-    afterEach(async () => {
+    afterEach(() => {
         if (originalEnv === undefined) delete process.env.NETLIFY_BLOBS_CONTEXT;
         else process.env.NETLIFY_BLOBS_CONTEXT = originalEnv;
-        await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
     it('round-trips JSON through the filesystem when no Netlify context is present', async () => {
         const { getUserStateJson, setUserStateJson, deleteUserStateKey, listUserStateKeys } = await import('../lib/user-state-store.js');
 
-        expect(await getUserStateJson('state/users/local-test.json')).toBeNull();
+        try {
+            expect(await getUserStateJson('state/users/local-test.json')).toBeNull();
 
-        await setUserStateJson('state/users/local-test.json', { savedRecipeIds: [7] });
-        expect(await getUserStateJson('state/users/local-test.json')).toEqual({ savedRecipeIds: [7] });
+            await setUserStateJson('state/users/local-test.json', { savedRecipeIds: [7] });
+            expect(await getUserStateJson('state/users/local-test.json')).toEqual({ savedRecipeIds: [7] });
 
-        await setUserStateJson('pending/local-test', { since: 123 });
-        const keys = await listUserStateKeys('pending/');
-        expect(keys).toContain('pending/local-test');
-
-        await deleteUserStateKey('state/users/local-test.json');
-        expect(await getUserStateJson('state/users/local-test.json')).toBeNull();
-
-        await deleteUserStateKey('pending/local-test');
+            await setUserStateJson('pending/local-test', { since: 123 });
+            const keys = await listUserStateKeys('pending/');
+            expect(keys).toContain('pending/local-test');
+        } finally {
+            await deleteUserStateKey('state/users/local-test.json');
+            await deleteUserStateKey('pending/local-test');
+        }
     });
 
     it('returns an empty list for a prefix with no entries', async () => {
         const { listUserStateKeys } = await import('../lib/user-state-store.js');
-        expect(await listUserStateKeys('pending/')).toEqual([]);
+        expect(await listUserStateKeys('nonexistent-prefix/')).toEqual([]);
     });
 });

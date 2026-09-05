@@ -9,6 +9,7 @@ import { clearSessionCookie, findOrCreateAuthorForUser, requireUser } from '../.
 import { upsertNotificationPreferences } from '../../lib/notifications.js';
 import { startAccountDeletion, startPrivacyExport } from '../../lib/privacy.js';
 import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../lib/public-recipe-catalog-cache.js';
+import { reconcileUserState } from '../../lib/user-state-flush.js';
 
 function normalizeOptionalUrl(v) {
     const s = String(v ?? '').trim();
@@ -74,6 +75,7 @@ export async function updateMyNotificationPreferencesAction(formData) {
     });
 
     revalidatePath('/profile');
+    await reconcileUserState(session.user.uuid);
 }
 
 export async function deleteMyAccountAction(formData) {

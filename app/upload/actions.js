@@ -40,6 +40,7 @@ import { getRecipePath } from '../../lib/recipe-url.js';
 import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../lib/public-recipe-catalog-cache.js';
 import { notifyNewRecipe, notifySampleImageAdded } from '../../lib/notifications.js';
 import { toStoredCameraMetadataText } from '../../lib/exif-reprocess.js';
+import { reconcileUserState } from '../../lib/user-state-flush.js';
 
 const ORIGINAL_BUCKET = process.env.OCI_IMAGES_ORIGINAL_BUCKET;
 const RESIZED_BUCKET = process.env.OCI_IMAGES_PROCESSED_BUCKET;
@@ -812,6 +813,7 @@ export async function prepareRecipeUploadAction({ parameters }) {
             await revalidatePublicRecipeCatalog();
             await revalidateRecipeDetail(createdRecipeId);
         }
+        await reconcileUserState(session.user.uuid);
         return {
             ok: true,
             parUrl,
@@ -949,6 +951,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
             }
             await revalidatePublicRecipeCatalog();
             await revalidateRecipeDetail(preparedRecipeId);
+            await reconcileUserState(session.user.uuid);
             return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
         }
 
@@ -1034,6 +1037,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
             resizeStatus.resizeSucceeded = true;
             await revalidatePublicRecipeCatalog();
             await revalidateRecipeDetail(preparedRecipeId);
+            await reconcileUserState(session.user.uuid);
             return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
         }
 
@@ -1047,6 +1051,7 @@ export async function finalizeRecipeUploadAction({ parameters }) {
 
         await revalidatePublicRecipeCatalog();
         await revalidateRecipeDetail(preparedRecipeId);
+        await reconcileUserState(session.user.uuid);
         return { ok: true, fullSizeUrl: assetFullSizeUrl, ...resizeStatus };
     } catch (e) {
         console.error(e);

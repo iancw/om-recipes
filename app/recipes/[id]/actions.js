@@ -20,6 +20,7 @@ import { applySlugChange, computeSlugBase, resolveUniqueSlug } from '../../../li
 import { revalidatePublicRecipeCatalog, revalidateRecipeDetail } from '../../../lib/public-recipe-catalog-cache.js';
 import { addComment, deleteComment } from '../../../lib/comments.js';
 import { notifyRecipeCommented } from '../../../lib/notifications.js';
+import { reconcileUserState } from '../../../lib/user-state-flush.js';
 
 import {
     computeRecipeFingerprint,
@@ -459,6 +460,7 @@ export async function addCommentAction({ recipeId, body }) {
 
     await revalidateRecipeDetail(parsedRecipeId);
     revalidatePath(getRecipePath(recipe));
+    await reconcileUserState(session.user.uuid);
 
     return { ok: true };
 }

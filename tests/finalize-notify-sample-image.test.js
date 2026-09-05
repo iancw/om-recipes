@@ -7,7 +7,7 @@ let notifySampleImageAddedMock;
 let finalizeRecipeUploadAction;
 
 vi.mock('../lib/auth.js', () => ({
-    requireUser: () => Promise.resolve({ user: { id: 9, email: 'owner@example.com' } })
+    requireUser: () => Promise.resolve({ user: { id: 9, email: 'owner@example.com', uuid: 'owner-uuid' } })
 }));
 
 vi.mock('../lib/notifications.js', () => ({
@@ -29,6 +29,11 @@ vi.mock('../lib/public-recipe-catalog-cache.js', () => ({
     revalidateRecipeDetail: (...args) => revalidateRecipeDetailMock(...args)
 }));
 
+let reconcileUserStateMock;
+vi.mock('../lib/user-state-flush.js', () => ({
+    reconcileUserState: (...args) => reconcileUserStateMock(...args)
+}));
+
 vi.mock('../db/index.ts', () => ({
     db: {
         select: (...args) => selectMock(...args),
@@ -42,6 +47,7 @@ describe('finalizeRecipeUploadAction notifies on sample image add', () => {
         vi.resetModules();
         notifySampleImageAddedMock = vi.fn(() => Promise.resolve());
         revalidateRecipeDetailMock = vi.fn(() => Promise.resolve());
+        reconcileUserStateMock = vi.fn(() => Promise.resolve());
 
         // First select: the image + author join lookup inside finalizeRecipeUploadAction.
         selectMock = vi.fn(() => ({
@@ -85,5 +91,6 @@ describe('finalizeRecipeUploadAction notifies on sample image add', () => {
 
         expect(notifySampleImageAddedMock).toHaveBeenCalledWith(5, 100, 2);
         expect(revalidateRecipeDetailMock).toHaveBeenCalledWith(5);
+        expect(reconcileUserStateMock).toHaveBeenCalledWith('owner-uuid');
     });
 });

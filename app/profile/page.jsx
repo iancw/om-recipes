@@ -1,7 +1,10 @@
 import Link from 'next/link';
+import { eq } from 'drizzle-orm';
 import { Button, buttonVariants } from 'components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from 'components/ui/card';
-import { getSession } from '../../lib/auth.js';
+import { db } from '../../db/index.ts';
+import { authors, users } from '../../db/schema.ts';
+import { defaultDisplayNameFromEmail, getSession } from '../../lib/auth.js';
 import { getEffectivePreferences } from '../../lib/notifications.js';
 import { listPrivacyRequestsForUser, PRIVACY_REQUEST_STATUS_COMPLETED, PRIVACY_REQUEST_TYPE_EXPORT } from '../../lib/privacy.js';
 import { deleteMyAccountAction, requestMyDataExportAction, updateMyNotificationPreferencesAction, updateMyProfileAction } from './actions';
@@ -15,7 +18,6 @@ export const metadata = {
 export default async function Page() {
     const session = await getSession();
     const user = session?.user;
-    const author = session?.author;
 
     if (!user) {
         return (
@@ -32,6 +34,20 @@ export default async function Page() {
             </Card>
         );
     }
+
+    const [row] = await db
+        .select({
+            email: users.email,
+            authorName: authors.name,
+            instagramLink: authors.instagramLink,
+            flickrLink: authors.flickrLink,
+            website: authors.website,
+            kofiLink: authors.kofiLink
+        })
+        .from(users)
+        .leftJoin(authors, eq(authors.userId, users.id))
+        .where(eq(users.id, user.id))
+        .limit(1);
 
     const privacyRequests = await listPrivacyRequestsForUser(user.id);
     const notificationPreferences = await getEffectivePreferences(user.id);
@@ -50,11 +66,11 @@ export default async function Page() {
                     <ProfileForm
                         action={updateMyProfileAction}
                         initialValues={{
-                            name: author?.name ?? user.name ?? '',
-                            instagramLink: author?.instagramLink ?? '',
-                            flickrLink: author?.flickrLink ?? '',
-                            website: author?.website ?? '',
-                            kofiLink: author?.kofiLink ?? ''
+                            name: row?.authorName ?? defaultDisplayNameFromEmail(row?.email),
+                            instagramLink: row?.instagramLink ?? '',
+                            flickrLink: row?.flickrLink ?? '',
+                            website: row?.website ?? '',
+                            kofiLink: row?.kofiLink ?? ''
                         }}
                     />
                     </CardContent>

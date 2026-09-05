@@ -8,7 +8,8 @@ import {
     recipeComparisonImages,
     recipeMonoSettings,
     recipeSampleImages,
-    recipes
+    recipes,
+    users
 } from '../../../db/schema.ts';
 import { and, eq, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -421,7 +422,18 @@ export async function addCommentAction({ recipeId, body }) {
     if (recipeRows.length === 0) throw new Error('Recipe not found');
     const recipe = recipeRows[0];
 
-    const author = await findOrCreateAuthorForUser({ userId: session.user.id, email: session.user.email });
+    const userRows = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, session.user.id))
+        .limit(1);
+
+    let author;
+    try {
+        author = await findOrCreateAuthorForUser({ userId: session.user.id, email: userRows[0]?.email });
+    } catch (err) {
+        return { ok: false, error: err?.message || 'Unable to post comment right now' };
+    }
 
     let comment;
     try {

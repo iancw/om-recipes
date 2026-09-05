@@ -91,12 +91,8 @@ describe('auth route cookies', () => {
         vi.mocked(getSession).mockResolvedValue({
             user: {
                 id: 42,
-                uuid: 'user-uuid',
-                email: 'ian@example.com',
-                name: 'Ian',
-                emailVerifiedAt: new Date('2026-04-23T00:00:00Z')
+                uuid: 'user-uuid'
             },
-            author: null,
             session: {
                 id: 99,
                 expiresAt: new Date('2026-05-01T00:00:00Z')
@@ -108,9 +104,7 @@ describe('auth route cookies', () => {
         await expect(response.json()).resolves.toEqual({
             user: {
                 id: 42,
-                uuid: 'user-uuid',
-                email: 'ian@example.com',
-                name: 'Ian'
+                uuid: 'user-uuid'
             }
         });
     });

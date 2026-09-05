@@ -11,7 +11,7 @@ let notifyRecipeCommentedMock;
 let findOrCreateAuthorForUserMock;
 
 vi.mock('../lib/auth.js', () => ({
-    requireUser: () => Promise.resolve({ user: { id: 9, email: 'user@example.com' } }),
+    requireUser: () => Promise.resolve({ user: { id: 9 } }),
     findOrCreateAuthorForUser: (...args) => findOrCreateAuthorForUserMock(...args)
 }));
 
@@ -42,7 +42,10 @@ describe('addCommentAction', () => {
         notifyRecipeCommentedMock = vi.fn(() => Promise.resolve());
         findOrCreateAuthorForUserMock = vi.fn(() => Promise.resolve({ id: 2, uuid: 'author-uuid', name: 'Commenter' }));
 
-        const recipeSelectResponses = [[{ id: 123, uuid: 'recipe-uuid', slug: 'recipe-slug' }]];
+        const recipeSelectResponses = [
+            [{ id: 123, uuid: 'recipe-uuid', slug: 'recipe-slug' }],
+            [{ email: 'user@example.com' }]
+        ];
         selectMock = vi.fn(() => {
             const res = recipeSelectResponses.shift() ?? [];
             return {
@@ -87,6 +90,22 @@ describe('addCommentAction', () => {
         expect(result).toEqual({ ok: false, error: 'Please wait a moment before posting another comment' });
         expect(notifyRecipeCommentedMock).not.toHaveBeenCalled();
         expect(revalidatePathMock).not.toHaveBeenCalled();
+    });
+
+    it('returns the ghost-session error as data instead of throwing when findOrCreateAuthorForUser rejects', async () => {
+        // A device's cookie can still verify as valid for up to a week after the
+        // account behind it was deleted elsewhere (stateless sessions). If the
+        // first write from such a session hits findOrCreateAuthorForUser, it now
+        // rejects with a clean message instead of a raw FK-violation throw — this
+        // must surface as returned data, not an uncaught throw.
+        findOrCreateAuthorForUserMock = vi.fn(() =>
+            Promise.reject(new Error('Your account no longer exists. Please sign in again.'))
+        );
+
+        const result = await addCommentAction({ recipeId: 123, body: 'Hi' });
+
+        expect(result).toEqual({ ok: false, error: 'Your account no longer exists. Please sign in again.' });
+        expect(addCommentMock).not.toHaveBeenCalled();
     });
 
     it('still throws when the recipe does not exist', async () => {

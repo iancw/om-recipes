@@ -30,7 +30,6 @@ export async function updateMyProfileAction(formData) {
 
     const author = await findOrCreateAuthorForUser({
         userId: session.user.id,
-        email: session.user.email,
         displayName: name
     });
 

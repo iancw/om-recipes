@@ -673,7 +673,6 @@ export async function prepareRecipeUploadAction({ parameters }) {
 
         const authorRow = await findOrCreateAuthorForUser({
             userId: session.user.id,
-            email: session.user.email,
             displayName: author
         });
         const authorId = authorRow.id;

@@ -78,6 +78,7 @@ Frequently used environment variables in this project include:
 - `NETLIFY_DATABASE_URL`
 - `NEXT_PUBLIC_GA4_MEASUREMENT_ID`
 - `AUTH_COOKIE_DOMAIN`
+- `AUTH_SESSION_SIGNING_SECRET` — signs the session cookie (`lib/auth-session-token.js`). Required; generate with `openssl rand -base64 32`. Rotating it signs everyone out.
 - `OCI_EMAIL_DELIVERY_ENDPOINT`
 - `OCI_EMAIL_DELIVERY_COMPARTMENT_OCID`
 - `OCI_EMAIL_SENDER`
